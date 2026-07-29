@@ -1,0 +1,11 @@
+name: RiskLedger
+description: A GitHub App that triages dependency vulnerabilities.
+public: false
+url: https://github.com/apps/riskledger
+default_events:
+  - push
+default_permissions:
+  contents: write
+  pull_requests: write
+  issues: write
+setup_url: http://localhost:3000

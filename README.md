@@ -45,6 +45,7 @@ Open PR   Post comment
 ## Features
 
 ### Core (v1)
+
 - Triggers on push, PR open, and a weekly scheduled full-repo scan
 - `npm audit` and `pip-audit` support out of the box
 - Auto-patch PRs for semver-safe fixes, batched sensibly (minor bumps grouped, majors kept separate)
@@ -53,38 +54,42 @@ Open PR   Post comment
 - Zero-config install: pick repos, done
 
 ### Classification intelligence
+
 - `.security-policy.json` lets you declare unused features or modes (e.g. "we don't use RSC") so the classifier can rule out CVEs that don't apply to your usage
 - Severity-aware routing — critical/high always goes to human review regardless of patchability
 - Dedup logic so one CVE across multiple packages doesn't spam separate comments
 - `/recheck` command to re-run classification after you update policy
 
 ### PR and comment behavior
+
 - PR descriptions include CVE IDs, severity, changelog links, and a diff summary
 - Auto-applied labels: `security`, `auto-patch`, `needs-review`
 - Optional auto-merge for low-risk patch-level bumps when CI passes
 - Comments update in place instead of duplicating on every run
 
 ### Reporting
+
 - Weekly digest summarizing patched / open / accepted-risk counts
 - Optional status badge for the README
 - Optional cross-repo dashboard for maintainers running the bot on multiple projects
 
 ### Notifications
+
 - Slack/Discord webhook for critical findings
 - Email digest fallback
 
 ## Tech stack
 
-| Layer | Choice |
-|---|---|
-| Framework | [Probot](https://probot.github.io/) (Node.js) |
-| Language | TypeScript |
-| GitHub API | Octokit (bundled with Probot) |
-| Audit tooling | `npm audit`, `pip-audit` via `child_process` |
-| Scheduling | GitHub Actions cron, or serverless cron if self-hosted |
-| Storage | None — state lives in `accepted-risks.md` in each repo |
-| Testing | Jest + Probot's testing helpers, `nock` for mocked API calls |
-| Local dev | [smee.io](https://smee.io) to proxy webhooks |
+| Layer         | Choice                                                       |
+| ------------- | ------------------------------------------------------------ |
+| Framework     | [Probot](https://probot.github.io/) (Node.js)                |
+| Language      | TypeScript                                                   |
+| GitHub API    | Octokit (bundled with Probot)                                |
+| Audit tooling | `npm audit`, `pip-audit` via `child_process`                 |
+| Scheduling    | GitHub Actions cron, or serverless cron if self-hosted       |
+| Storage       | None — state lives in `accepted-risks.md` in each repo       |
+| Testing       | Jest + Probot's testing helpers, `nock` for mocked API calls |
+| Local dev     | [smee.io](https://smee.io) to proxy webhooks                 |
 
 ## Installation
 
@@ -116,16 +121,18 @@ Open PR   Post comment
 }
 ```
 
-| Field | Description |
-|---|---|
-| `unusedFeatures` | Feature flags the classifier checks against a CVE's affected surface before ruling it non-applicable |
-| `autoMergePatchLevel` | If `true`, patch-level auto-PRs merge automatically once CI passes |
-| `autoPatch.minSeverity` / `maxSeverity` | Severity range eligible for auto-patching; anything above `maxSeverity` always goes to human review |
-| `notify.slackWebhook` | Optional webhook URL for critical-finding alerts |
+| Field                                   | Description                                                                                          |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `unusedFeatures`                        | Feature flags the classifier checks against a CVE's affected surface before ruling it non-applicable |
+| `autoMergePatchLevel`                   | If `true`, patch-level auto-PRs merge automatically once CI passes                                   |
+| `autoPatch.minSeverity` / `maxSeverity` | Severity range eligible for auto-patching; anything above `maxSeverity` always goes to human review  |
+| `notify.slackWebhook`                   | Optional webhook URL for critical-finding alerts                                                     |
+
+**Trust boundary:** `.security-policy.json` controls what the classifier is allowed to wave through, which makes it a target in its own right — a PR that quietly loosens it and lands a real vulnerability in the same or a follow-up change would otherwise sail through as "accepted risk." Any PR touching this file is always routed to human review, regardless of `autoMergePatchLevel` or anything else the new policy claims. We'd also recommend adding it to your repo's `CODEOWNERS` so only maintainers can approve changes to it.
 
 ## Commands
 
-Comment these on an issue or PR RiskLedger has opened:
+Comment these on an issue or PR RiskLedger has opened. Both commands check that the commenter has `write` or `admin` access to the repo before doing anything — a commenter without that access gets a reply explaining the command was ignored, not a silent no-op and not an executed action.
 
 - `/recheck` — re-run classification against the current policy file
 - `/accept <reason>` — manually mark a flagged finding as accepted risk, logged with your GitHub handle
@@ -148,7 +155,8 @@ Comment these on an issue or PR RiskLedger has opened:
 │   │   └── appendToRiskLog.ts
 │   └── commands/
 │       ├── recheck.ts
-│       └── accept.ts
+│       ├── accept.ts
+│       └── checkCommenterRole.ts  # write/admin check, shared by both commands
 ├── test/
 │   └── fixtures/              # sample audit output for tests
 ├── .security-policy.json      # example policy (this repo's own)
