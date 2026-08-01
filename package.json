@@ -13,13 +13,17 @@
     "node": ">=20"
   },
   "dependencies": {
+    "cross-spawn": "^7.0.6",
+    "dotenv": "^17.2.1",
     "probot": "^14.3.2"
   },
   "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.13.10",
     "jest": "^29.7.0",
     "pino": "^9.7.0",
+    "smee-client": "^5.0.0",
     "ts-jest": "^29.2.6",
     "typescript": "^5.8.2"
   }
