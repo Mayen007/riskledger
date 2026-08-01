@@ -3,6 +3,7 @@ import { classify } from "../src/classify/classify";
 import { openPatchPR } from "../src/actions/openPatchPR";
 import { postRiskComment } from "../src/actions/postRiskComment";
 import { runAuditNpm } from "../src/audit/runAuditNpm";
+import { readFile, writeFile } from "node:fs/promises";
 
 jest.mock("../src/audit/runAuditNpm", () => ({
   runAuditNpm: jest.fn(),
@@ -20,10 +21,17 @@ jest.mock("../src/classify/classify", () => ({
   classify: jest.fn(),
 }));
 
+jest.mock("node:fs/promises", () => ({
+  readFile: jest.fn(),
+  writeFile: jest.fn(),
+}));
+
 const mockedRunAuditNpm = jest.mocked(runAuditNpm);
 const mockedOpenPatchPR = jest.mocked(openPatchPR);
 const mockedPostRiskComment = jest.mocked(postRiskComment);
 const mockedClassify = jest.mocked(classify);
+const mockedReadFile = jest.mocked(readFile);
+const mockedWriteFile = jest.mocked(writeFile);
 
 function createContext(overrides: Partial<Parameters<typeof handlePush>[0]> = {}) {
   return {
@@ -62,6 +70,8 @@ describe("runAuditWorkflow", () => {
     mockedOpenPatchPR.mockReset();
     mockedPostRiskComment.mockReset();
     mockedClassify.mockReset();
+    mockedReadFile.mockReset();
+    mockedWriteFile.mockReset();
   });
 
   it("opens a patch PR for patchable findings on push", async () => {
@@ -132,6 +142,7 @@ describe("runAuditWorkflow", () => {
         reason: "A fix exists, but the severity is outside the auto-patch window.",
       },
     ]);
+    mockedReadFile.mockResolvedValue("# Accepted risks\n");
 
     await handlePullRequest(context, process.cwd());
 
@@ -140,6 +151,11 @@ describe("runAuditWorkflow", () => {
       { owner: "owner", repo: "repo" },
       42,
       expect.objectContaining({ decision: "needs-review" }),
+    );
+    expect(mockedWriteFile).toHaveBeenCalledWith(
+      expect.stringContaining("accepted-risks.md"),
+      expect.stringContaining("brace-expansion"),
+      "utf8",
     );
     expect(mockedOpenPatchPR).not.toHaveBeenCalled();
   });

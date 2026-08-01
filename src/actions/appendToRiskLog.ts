@@ -8,5 +8,9 @@ export function appendToRiskLog(existingLog: string, finding: ClassifiedFinding)
     `  - reason: ${finding.reason}`,
   ].join("\n");
 
+  if (existingLog.trim().length === 0) {
+    return `${entry}\n`;
+  }
+
   return `${existingLog.trimEnd()}\n${entry}\n`;
 }

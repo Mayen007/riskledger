@@ -4,6 +4,7 @@ public: false
 url: https://github.com/apps/riskledger
 default_events:
   - push
+  - pull_request
 default_permissions:
   contents: write
   pull_requests: write

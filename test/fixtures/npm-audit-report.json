@@ -1,0 +1,28 @@
+{
+  "metadata": {
+    "vulnerabilities": {
+      "left-pad": {
+        "severity": "moderate"
+      },
+      "brace-expansion": {
+        "severity": "high"
+      }
+    }
+  },
+  "vulnerabilities": {
+    "left-pad": {
+      "severity": "moderate",
+      "title": "Prototype pollution in left-pad",
+      "vulnerable_versions": "<1.3.0",
+      "patched_versions": ">=1.3.0",
+      "fix_available": true
+    },
+    "brace-expansion": {
+      "severity": "high",
+      "title": "Command injection in brace-expansion",
+      "vulnerable_versions": "<2.0.1",
+      "patched_versions": ">=2.0.1",
+      "fix_available": true
+    }
+  }
+}

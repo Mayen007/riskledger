@@ -1,10 +1,6 @@
 import type { Probot } from "probot";
 
-import { handlePullRequest, handlePush } from "./commands/runAuditWorkflow";
-
-function isRepoPathValidationError(error: unknown): error is Error {
-  return error instanceof Error && error.message.startsWith("RiskLedger repo path does not exist:");
-}
+import { RepoPathValidationError, handlePullRequest, handlePush } from "./commands/runAuditWorkflow";
 
 export default function registerApp(app: Probot): void {
   app.on("push", async (context) => {
@@ -16,7 +12,7 @@ export default function registerApp(app: Probot): void {
     try {
       await handlePush(context as never, process.env.RISKLEDGER_REPO_PATH ?? process.cwd());
     } catch (error) {
-      if (isRepoPathValidationError(error)) {
+      if (error instanceof RepoPathValidationError) {
         app.log.warn({ repository, error: error.message }, "Skipping push workflow because the repo path is invalid");
         return;
       }
@@ -34,7 +30,7 @@ export default function registerApp(app: Probot): void {
     try {
       await handlePullRequest(context as never, process.env.RISKLEDGER_REPO_PATH ?? process.cwd());
     } catch (error) {
-      if (isRepoPathValidationError(error)) {
+      if (error instanceof RepoPathValidationError) {
         app.log.warn({ repository, error: error.message }, "Skipping pull_request workflow because the repo path is invalid");
         return;
       }
