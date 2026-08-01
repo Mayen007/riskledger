@@ -4,4 +4,6 @@ CLAUDE.md
 ROADMAP.md
 node_modules/
 .env
-riskledger-bot.2026-08-01.private-key.pem
+*.pem
+dist/
+coverage/
