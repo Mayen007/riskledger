@@ -15,7 +15,7 @@ describe("push handler", () => {
     registerApp(app as never);
 
     expect(app.on).toHaveBeenCalledWith("push", expect.any(Function));
-    expect(app.on).toHaveBeenCalledWith("pull_request", expect.any(Function));
+    expect(app.on).toHaveBeenCalledWith("pull_request.opened", expect.any(Function));
     expect(app.on).toHaveBeenCalledWith("issue_comment.created", expect.any(Function));
   });
 });

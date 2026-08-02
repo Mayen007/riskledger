@@ -1,0 +1,23 @@
+{
+  "action": "created",
+  "comment": {
+    "body": "   /recheck   ",
+    "user": {
+      "login": "Mayen007",
+      "type": "User"
+    }
+  },
+  "issue": {
+    "number": 5,
+    "pull_request": {
+      "url": "https://api.github.com/repos/Mayen007/reviwa/pulls/5"
+    }
+  },
+  "repository": {
+    "full_name": "Mayen007/reviwa",
+    "name": "reviwa",
+    "owner": {
+      "login": "Mayen007"
+    }
+  }
+}
