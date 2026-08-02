@@ -26,6 +26,26 @@ jest.mock("node:fs/promises", () => ({
   writeFile: jest.fn(),
 }));
 
+// Mock withRepoCheckout so tests don't actually clone — just invoke the callback
+// with process.cwd(), preserving the existing test behavior.
+jest.mock("../src/audit/checkoutRepo", () => ({
+  withRepoCheckout: jest.fn(
+    async (_options: unknown, callback: (cwd: string) => Promise<unknown>) =>
+      callback(process.cwd()),
+  ),
+  CheckoutError: class CheckoutError extends Error {
+    constructor(url: string, cause: unknown) {
+      super(`Failed to clone ${url}: ${cause}`);
+      this.name = "CheckoutError";
+    }
+  },
+}));
+
+// detectEcosystems mock: always return ["npm"] so runAuditNpm is always called
+jest.mock("../src/audit/detectEcosystems", () => ({
+  detectEcosystems: jest.fn().mockResolvedValue(["npm"]),
+}));
+
 const mockedRunAuditNpm = jest.mocked(runAuditNpm);
 const mockedOpenPatchPR = jest.mocked(openPatchPR);
 const mockedPostRiskComment = jest.mocked(postRiskComment);
@@ -40,11 +60,12 @@ function createContext(overrides: Partial<Parameters<typeof handlePush>[0]> = {}
         owner: { login: "owner" },
         name: "repo",
         full_name: "owner/repo",
+        clone_url: "https://github.com/owner/repo.git",
       },
       ref: "refs/heads/main",
       pull_request: {
         number: 42,
-        head: { ref: "main" },
+        head: { ref: "main", sha: "abc1234" },
       },
     },
     octokit: {
@@ -56,9 +77,11 @@ function createContext(overrides: Partial<Parameters<typeof handlePush>[0]> = {}
           createComment: jest.fn(),
         },
       },
+      auth: jest.fn().mockResolvedValue({ token: "ghs_test" }),
     },
     log: {
       info: jest.fn(),
+      warn: jest.fn(),
     },
     ...overrides,
   };
@@ -104,7 +127,7 @@ describe("runAuditWorkflow", () => {
       },
     ]);
 
-    await handlePush(context, process.cwd());
+    await handlePush(context);
 
     expect(mockedOpenPatchPR).toHaveBeenCalledWith(context.octokit.rest.pulls, {
       owner: "owner",
@@ -144,7 +167,7 @@ describe("runAuditWorkflow", () => {
     ]);
     mockedReadFile.mockResolvedValue("# Accepted risks\n");
 
-    await handlePullRequest(context, process.cwd());
+    await handlePullRequest(context);
 
     expect(mockedPostRiskComment).toHaveBeenCalledWith(
       context.octokit.rest.issues,

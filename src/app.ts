@@ -1,7 +1,7 @@
 import type { Probot } from "probot";
 
 import { handleIssueComment } from "./commands/handleIssueComment";
-import { RepoPathValidationError, handlePullRequest, handlePush } from "./commands/runAuditWorkflow";
+import { CheckoutError, handlePullRequest, handlePush } from "./commands/runAuditWorkflow";
 
 export default function registerApp(app: Probot): void {
   app.on("push", async (context) => {
@@ -11,10 +11,10 @@ export default function registerApp(app: Probot): void {
     app.log.info({ repository, ref }, "Received push event");
 
     try {
-      await handlePush(context as never, process.env.RISKLEDGER_REPO_PATH ?? process.cwd());
+      await handlePush(context as never);
     } catch (error) {
-      if (error instanceof RepoPathValidationError) {
-        app.log.warn({ repository, error: error.message }, "Skipping push workflow because the repo path is invalid");
+      if (error instanceof CheckoutError) {
+        app.log.warn({ repository, error: error.message }, "Skipping push workflow because the checkout failed");
         return;
       }
 
@@ -29,10 +29,10 @@ export default function registerApp(app: Probot): void {
     app.log.info({ repository, pullRequestNumber: String(pullRequestNumber) }, "Received pull_request.opened event");
 
     try {
-      await handlePullRequest(context as never, process.env.RISKLEDGER_REPO_PATH ?? process.cwd());
+      await handlePullRequest(context as never);
     } catch (error) {
-      if (error instanceof RepoPathValidationError) {
-        app.log.warn({ repository, error: error.message }, "Skipping pull_request.opened workflow because the repo path is invalid");
+      if (error instanceof CheckoutError) {
+        app.log.warn({ repository, error: error.message }, "Skipping pull_request.opened workflow because the checkout failed");
         return;
       }
 
@@ -49,10 +49,10 @@ export default function registerApp(app: Probot): void {
     );
 
     try {
-      await handleIssueComment(context as never, process.env.RISKLEDGER_REPO_PATH ?? process.cwd());
+      await handleIssueComment(context as never);
     } catch (error) {
-      if (error instanceof RepoPathValidationError) {
-        app.log.warn({ repository, error: error.message }, "Skipping issue_comment workflow because the repo path is invalid");
+      if (error instanceof CheckoutError) {
+        app.log.warn({ repository, error: error.message }, "Skipping issue_comment workflow because the checkout failed");
         return;
       }
 

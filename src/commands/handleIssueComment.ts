@@ -1,4 +1,4 @@
-import { RepoPathValidationError, handlePullRequest } from "./runAuditWorkflow";
+import { handlePullRequest } from "./runAuditWorkflow";
 import { checkCommenterRole, type CommenterRoleOctokit } from "./checkCommenterRole";
 import {
   postCommandRejectionComment,
@@ -28,12 +28,14 @@ export interface IssueCommentCreatedContext {
       owner: {
         login: string;
       };
+      clone_url: string;
     };
   };
   octokit: CommenterRoleOctokit & {
     rest: {
       issues: CommandRejectionCommentWriter;
     };
+    auth: (options: { type: string }) => Promise<{ token: string }>;
   };
   log: {
     info: (data: Record<string, string>, message: string) => void;
@@ -62,6 +64,7 @@ function buildPullRequestWorkflowContext(context: IssueCommentCreatedContext): P
         owner: { login: context.payload.repository.owner.login },
         name: context.payload.repository.name,
         full_name: context.payload.repository.full_name,
+        clone_url: context.payload.repository.clone_url,
       },
       ref: "refs/heads/main",
       pull_request: {
@@ -81,7 +84,7 @@ function repositoryRef(context: IssueCommentCreatedContext): CommandRepositoryRe
   };
 }
 
-export async function handleIssueComment(context: IssueCommentCreatedContext, cwd: string): Promise<void> {
+export async function handleIssueComment(context: IssueCommentCreatedContext): Promise<void> {
   const comment = context.payload.comment;
 
   if (comment.user.type === "Bot") {
@@ -118,7 +121,7 @@ export async function handleIssueComment(context: IssueCommentCreatedContext, cw
       return;
     }
 
-    await handlePullRequest(buildPullRequestWorkflowContext(context), cwd);
+    await handlePullRequest(buildPullRequestWorkflowContext(context));
     return;
   }
 

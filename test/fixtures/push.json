@@ -1,13 +1,6 @@
 {
-  "action": "opened",
-  "number": 7,
-  "pull_request": {
-    "number": 7,
-    "head": {
-      "ref": "feat/add-lodash",
-      "sha": "abc1234def5678"
-    }
-  },
+  "ref": "refs/heads/main",
+  "after": "def5678abc1234",
   "repository": {
     "full_name": "Mayen007/reviwa",
     "name": "reviwa",

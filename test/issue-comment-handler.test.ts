@@ -37,6 +37,7 @@ type IssueCommentPayload = {
     owner: {
       login: string;
     };
+    clone_url: string;
   };
 };
 
@@ -54,6 +55,7 @@ function createContext(payload: IssueCommentPayload) {
           createComment: jest.fn(),
         },
       },
+      auth: jest.fn().mockResolvedValue({ token: "ghs_test" }),
     },
     log: {
       info: jest.fn(),
@@ -71,7 +73,7 @@ describe("handleIssueComment", () => {
   it("ignores bot comments before any command parsing", async () => {
     const context = createContext(loadFixture("issue-comment.bot.json"));
 
-    await handleIssueComment(context as never, process.cwd());
+    await handleIssueComment(context as never);
 
     expect(mockedCheckCommenterRole).not.toHaveBeenCalled();
     expect(mockedHandlePullRequest).not.toHaveBeenCalled();
@@ -80,7 +82,7 @@ describe("handleIssueComment", () => {
   it("ignores human comments that are not commands", async () => {
     const context = createContext(loadFixture("issue-comment.human-note.json"));
 
-    await handleIssueComment(context as never, process.cwd());
+    await handleIssueComment(context as never);
 
     expect(mockedCheckCommenterRole).not.toHaveBeenCalled();
     expect(mockedHandlePullRequest).not.toHaveBeenCalled();
@@ -92,7 +94,7 @@ describe("handleIssueComment", () => {
     mockedCheckCommenterRole.mockResolvedValue(true);
     mockedHandlePullRequest.mockResolvedValue(undefined);
 
-    await handleIssueComment(context as never, process.cwd());
+    await handleIssueComment(context as never);
 
     expect(mockedCheckCommenterRole).toHaveBeenCalledWith(
       context.octokit,
@@ -100,6 +102,6 @@ describe("handleIssueComment", () => {
       "reviwa",
       "Mayen007",
     );
-    expect(mockedHandlePullRequest).toHaveBeenCalledWith(expect.any(Object), process.cwd());
+    expect(mockedHandlePullRequest).toHaveBeenCalledWith(expect.any(Object));
   });
 });

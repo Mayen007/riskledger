@@ -29,6 +29,25 @@ jest.mock("node:fs/promises", () => ({
   writeFile: jest.fn(),
 }));
 
+// withRepoCheckout passes cwd directly to the callback — no real clone
+jest.mock("../src/audit/checkoutRepo", () => ({
+  withRepoCheckout: jest.fn(
+    async (_options: unknown, callback: (cwd: string) => Promise<unknown>) =>
+      callback(process.cwd()),
+  ),
+  CheckoutError: class CheckoutError extends Error {
+    constructor(url: string, cause: unknown) {
+      super(`Failed to clone ${url}: ${cause}`);
+      this.name = "CheckoutError";
+    }
+  },
+}));
+
+// Always report npm so the audit path is exercised
+jest.mock("../src/audit/detectEcosystems", () => ({
+  detectEcosystems: jest.fn().mockResolvedValue(["npm"]),
+}));
+
 const mockedRunAuditNpm = jest.mocked(runAuditNpm);
 const mockedOpenPatchPR = jest.mocked(openPatchPR);
 const mockedPostRiskComment = jest.mocked(postRiskComment);
@@ -41,12 +60,13 @@ type PullRequestOpenedPayload = {
   number: number;
   pull_request: {
     number: number;
-    head: { ref: string };
+    head: { ref: string; sha?: string };
   };
   repository: {
     full_name: string;
     name: string;
     owner: { login: string };
+    clone_url: string;
   };
 };
 
@@ -62,11 +82,15 @@ function createContext(payload: PullRequestOpenedPayload) {
         owner: { login: payload.repository.owner.login },
         name: payload.repository.name,
         full_name: payload.repository.full_name,
+        clone_url: payload.repository.clone_url,
       },
       ref: `refs/heads/${payload.pull_request.head.ref}`,
       pull_request: {
         number: payload.pull_request.number,
-        head: { ref: payload.pull_request.head.ref },
+        head: {
+          ref: payload.pull_request.head.ref,
+          sha: payload.pull_request.head.sha,
+        },
       },
     },
     octokit: {
@@ -78,9 +102,11 @@ function createContext(payload: PullRequestOpenedPayload) {
           createComment: jest.fn(),
         },
       },
+      auth: jest.fn().mockResolvedValue({ token: "ghs_test" }),
     },
     log: {
       info: jest.fn(),
+      warn: jest.fn(),
     },
   };
 }
@@ -127,7 +153,7 @@ describe("pull_request.opened handler", () => {
     ]);
     mockedReadFile.mockResolvedValue("# Accepted risks\n");
 
-    await handlePullRequest(context, process.cwd());
+    await handlePullRequest(context);
 
     expect(mockedPostRiskComment).toHaveBeenCalledWith(
       context.octokit.rest.issues,
@@ -150,7 +176,7 @@ describe("pull_request.opened handler", () => {
     mockedRunAuditNpm.mockResolvedValue([]);
     mockedClassify.mockReturnValue([]);
 
-    await handlePullRequest(context, process.cwd());
+    await handlePullRequest(context);
 
     expect(mockedPostRiskComment).not.toHaveBeenCalled();
     expect(mockedWriteFile).not.toHaveBeenCalled();
@@ -188,7 +214,7 @@ describe("pull_request.opened handler", () => {
       },
     ]);
 
-    await handlePullRequest(context, process.cwd());
+    await handlePullRequest(context);
 
     expect(mockedOpenPatchPR).not.toHaveBeenCalled();
     expect(mockedPostRiskComment).not.toHaveBeenCalled();
