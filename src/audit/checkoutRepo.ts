@@ -45,12 +45,27 @@ export async function withRepoCheckout<T>(
 
   try {
     try {
-      await simpleGit().clone(authenticatedUrl, tempDir, [
-        "--depth",
-        "1",
-        "--branch",
-        ref,
-      ]);
+      // GIT_TERMINAL_PROMPT=0 — git fails immediately instead of blocking on
+      // any interactive prompt (works across all credential helpers).
+      // GCM_INTERACTIVE=never — explicitly disables the Windows Git Credential
+      // Manager GUI ("Select an account" dialog) on Windows servers.
+      // -c credential.helper= — clears any system/global credential helper for
+      // this clone so git uses the token already embedded in the URL directly,
+      // without consulting GCM or any other helper.
+      await simpleGit()
+        .env({
+          ...process.env,
+          GIT_TERMINAL_PROMPT: "0",
+          GCM_INTERACTIVE: "never",
+        })
+        .clone(authenticatedUrl, tempDir, [
+          "-c",
+          "credential.helper=",
+          "--depth",
+          "1",
+          "--branch",
+          ref,
+        ]);
     } catch (err) {
       throw new CheckoutError(cloneUrl, err);
     }
