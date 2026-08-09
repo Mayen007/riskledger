@@ -15,6 +15,19 @@ import { readFile, writeFile } from "node:fs/promises";
 
 export { CheckoutError };
 
+/**
+ * Narrow interface for listing the files changed in a pull request.
+ * Requesting up to 300 files covers the GitHub API maximum.
+ */
+export interface PullRequestFilesReader {
+  listFiles: (input: {
+    owner: string;
+    repo: string;
+    pull_number: number;
+    per_page: number;
+  }) => Promise<{ data: Array<{ filename: string }> }>;
+}
+
 export interface WorkflowContext {
   payload: {
     repository: {
@@ -31,7 +44,7 @@ export interface WorkflowContext {
   };
   octokit: {
     rest: {
-      pulls: PullRequestWriter;
+      pulls: PullRequestWriter & PullRequestFilesReader;
       issues: IssueCommentWriter;
     };
     auth: (options: { type: string }) => Promise<{ token: string }>;
@@ -132,9 +145,38 @@ export async function handlePullRequest(context: WorkflowContext): Promise<void>
 
   const repository = repositoryRef(context);
   const repoLabel = `${repository.owner}/${repository.repo}`;
-  const token = await getInstallationToken(context);
   const pr = context.payload.pull_request;
+
+  // Non-negotiable #6: a PR touching .security-policy.json must always go to
+  // human review, regardless of what the new policy says. Check this BEFORE
+  // checking out the repo or running any audit logic.
+  const { data: changedFiles } = await context.octokit.rest.pulls.listFiles({
+    owner: repository.owner,
+    repo: repository.repo,
+    pull_number: pr.number,
+    per_page: 300,
+  });
+
+  if (changedFiles.some((f) => f.filename === ".security-policy.json")) {
+    context.log.warn(
+      { repository: repoLabel, pullRequestNumber: String(pr.number) },
+      "PR touches .security-policy.json — routing to mandatory human review",
+    );
+    await context.octokit.rest.issues.createComment({
+      owner: repository.owner,
+      repo: repository.repo,
+      issue_number: pr.number,
+      body: [
+        "⚠️ **Policy change detected**",
+        "",
+        "This PR modifies `.security-policy.json`, which controls how RiskLedger classifies and auto-patches findings.",
+        "It requires human review and **will not be auto-merged** by RiskLedger, regardless of the `autoMergePatchLevel` setting.",
+      ].join("\n"),
+    });
+    return;
+  }
   // Prefer the commit SHA for an exact checkout; fall back to the branch ref
+  const token = await getInstallationToken(context);
   const ref = pr.head.sha ?? pr.head.ref;
 
   const reviewFindings = await withRepoCheckout(

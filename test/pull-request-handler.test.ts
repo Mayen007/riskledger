@@ -12,6 +12,22 @@ jest.mock("../src/audit/runAuditNpm", () => ({
   runAuditNpm: jest.fn(),
 }));
 
+jest.mock("../src/audit/runAuditPip", () => ({
+  runAuditPip: jest.fn().mockResolvedValue([]),
+}));
+
+jest.mock("../src/classify/loadPolicy", () => ({
+  loadPolicy: jest.fn().mockResolvedValue({
+    autoPatch: { minSeverity: "low", maxSeverity: "moderate" },
+    autoMergePatchLevel: false,
+    acceptedRisks: [],
+  }),
+}));
+
+jest.mock("../src/classify/dedup", () => ({
+  dedup: jest.fn((findings: unknown[]) => findings),
+}));
+
 jest.mock("../src/actions/openPatchPR", () => ({
   openPatchPR: jest.fn(),
 }));
@@ -97,6 +113,7 @@ function createContext(payload: PullRequestOpenedPayload) {
       rest: {
         pulls: {
           create: jest.fn(),
+          listFiles: jest.fn().mockResolvedValue({ data: [] }),
         },
         issues: {
           createComment: jest.fn(),

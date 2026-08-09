@@ -89,6 +89,7 @@ function createContext(overrides: Partial<Parameters<typeof handlePush>[0]> = {}
       rest: {
         pulls: {
           create: jest.fn(),
+          listFiles: jest.fn().mockResolvedValue({ data: [] }),
         },
         issues: {
           createComment: jest.fn(),
