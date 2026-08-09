@@ -1,0 +1,24 @@
+{
+  "action": "created",
+  "comment": {
+    "body": "/accept GHSA-56pw-mpj4-fxww Only affects server-side rendering which this app does not use",
+    "user": {
+      "login": "Mayen007",
+      "type": "User"
+    }
+  },
+  "issue": {
+    "number": 5,
+    "pull_request": {
+      "url": "https://api.github.com/repos/Mayen007/reviwa/pulls/5"
+    }
+  },
+  "repository": {
+    "full_name": "Mayen007/reviwa",
+    "name": "reviwa",
+    "owner": {
+      "login": "Mayen007"
+    },
+    "clone_url": "https://github.com/Mayen007/reviwa.git"
+  }
+}

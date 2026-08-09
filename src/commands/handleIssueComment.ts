@@ -1,10 +1,12 @@
 import { handlePullRequest } from "./runAuditWorkflow";
 import { checkCommenterRole, type CommenterRoleOctokit } from "./checkCommenterRole";
+import { handleAccept } from "./handleAccept";
 import {
   postCommandRejectionComment,
   type CommandRejectionCommentWriter,
   type CommandRepositoryRef,
 } from "../actions/postCommandRejectionComment";
+import type { PolicyFileClient } from "../actions/updatePolicyFile";
 
 export interface IssueCommentCreatedContext {
   payload: {
@@ -34,6 +36,7 @@ export interface IssueCommentCreatedContext {
   octokit: CommenterRoleOctokit & {
     rest: {
       issues: CommandRejectionCommentWriter;
+      repos: PolicyFileClient;
     };
     auth: (options: { type: string }) => Promise<{ token: string }>;
   };
@@ -125,5 +128,8 @@ export async function handleIssueComment(context: IssueCommentCreatedContext): P
     return;
   }
 
-  context.log.info({ repository: context.payload.repository.full_name }, "Accepted /accept command after permission check");
+  if (command === "/accept") {
+    await handleAccept(context, comment.user.login);
+    return;
+  }
 }
