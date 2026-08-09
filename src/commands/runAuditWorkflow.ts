@@ -1,10 +1,12 @@
 import type { AuditFinding, ClassifiedFinding } from "../shared/types";
 import { classify } from "../classify/classify";
 import { loadPolicy } from "../classify/loadPolicy";
+import { dedup } from "../classify/dedup";
 import { appendToRiskLog } from "../actions/appendToRiskLog";
 import { openPatchPR, type PullRequestWriter, type RepositoryRef } from "../actions/openPatchPR";
 import { postRiskComment, type IssueCommentWriter } from "../actions/postRiskComment";
 import { runAuditNpm } from "../audit/runAuditNpm";
+import { runAuditPip } from "../audit/runAuditPip";
 import { withRepoCheckout, CheckoutError } from "../audit/checkoutRepo";
 import { detectEcosystems } from "../audit/detectEcosystems";
 import { existsSync } from "node:fs";
@@ -88,12 +90,12 @@ async function classifyRepository(
     allFindings.push(...findings);
   }
 
-  // pip support is detected but not yet implemented; log a note if present
   if (ecosystems.includes("pip")) {
-    log.info({ repository }, "pip ecosystem detected — pip-audit backend not yet implemented, skipping");
+    const findings = await runAuditPip(cwd);
+    allFindings.push(...findings);
   }
 
-  return classify(allFindings, policy);
+  return classify(dedup(allFindings), policy);
 }
 
 async function getInstallationToken(context: WorkflowContext): Promise<string> {
