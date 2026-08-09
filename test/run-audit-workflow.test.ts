@@ -3,10 +3,19 @@ import { classify } from "../src/classify/classify";
 import { openPatchPR } from "../src/actions/openPatchPR";
 import { postRiskComment } from "../src/actions/postRiskComment";
 import { runAuditNpm } from "../src/audit/runAuditNpm";
+import { runAuditPip } from "../src/audit/runAuditPip";
 import { readFile, writeFile } from "node:fs/promises";
 
 jest.mock("../src/audit/runAuditNpm", () => ({
   runAuditNpm: jest.fn(),
+}));
+
+jest.mock("../src/audit/runAuditPip", () => ({
+  runAuditPip: jest.fn().mockResolvedValue([]),
+}));
+
+jest.mock("../src/classify/dedup", () => ({
+  dedup: jest.fn((findings: unknown[]) => findings),
 }));
 
 jest.mock("../src/actions/openPatchPR", () => ({

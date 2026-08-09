@@ -2,7 +2,7 @@ import { runAuditPip } from "../src/audit/runAuditPip";
 import { parsePipAuditReport } from "../src/audit/parsePipAuditReport";
 import spawn from "cross-spawn";
 import type { ChildProcess } from "node:child_process";
-import { EventEmitter, Readable } from "node:stream";
+import { EventEmitter } from "node:events";
 
 jest.mock("cross-spawn");
 jest.mock("../src/audit/parsePipAuditReport", () => ({
@@ -14,14 +14,15 @@ const mockedParse = jest.mocked(parsePipAuditReport);
 
 function makeChildProcess(stdout: string, exitCode: number = 0): ChildProcess {
   const child = new EventEmitter() as unknown as ChildProcess;
-  const stdoutStream = new Readable({ read() {} });
+  // Use a plain EventEmitter for stdout — emitting `data` via a plain emitter
+  // fires synchronously, so the accumulation in runAuditPip completes before
+  // the `close` event resolves the promise (no race with Readable buffering).
+  const stdoutEmitter = new EventEmitter();
 
-  (child as unknown as Record<string, unknown>)["stdout"] = stdoutStream;
+  (child as unknown as Record<string, unknown>)["stdout"] = stdoutEmitter;
 
-  // Emit stdout data and then close asynchronously
   process.nextTick(() => {
-    stdoutStream.push(stdout);
-    stdoutStream.push(null);
+    stdoutEmitter.emit("data", Buffer.from(stdout));
     child.emit("close", exitCode);
   });
 
@@ -78,8 +79,8 @@ describe("runAuditPip", () => {
 
   it("rejects when the child process emits an error event", async () => {
     const child = new EventEmitter() as unknown as ChildProcess;
-    const stdoutStream = new Readable({ read() {} });
-    (child as unknown as Record<string, unknown>)["stdout"] = stdoutStream;
+    const stdoutEmitter = new EventEmitter();
+    (child as unknown as Record<string, unknown>)["stdout"] = stdoutEmitter;
 
     process.nextTick(() => {
       child.emit("error", new Error("spawn ENOENT"));
