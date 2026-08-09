@@ -1,0 +1,14 @@
+{
+  "autoPatch": {
+    "minSeverity": "low",
+    "maxSeverity": "high"
+  },
+  "autoMergePatchLevel": false,
+  "acceptedRisks": [
+    {
+      "cve": "CVE-2023-1234",
+      "reason": "Only affects SSR mode which this app does not use.",
+      "decidedBy": "alice"
+    }
+  ]
+}

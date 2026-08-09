@@ -29,4 +29,27 @@ describe("classify", () => {
       },
     ]);
   });
-});
+
+  it("routes a finding to accepted-risk when its advisoryId matches a policy entry", () => {
+    const finding = {
+      ecosystem: "npm" as const,
+      packageName: "left-pad",
+      severity: "moderate" as const,
+      advisoryId: "CVE-2023-1234",
+      title: "Prototype pollution",
+      vulnerableVersions: "<1.3.0",
+      fixAvailable: true,
+    };
+
+    const result = classify([finding], {
+      autoPatch: { minSeverity: "low", maxSeverity: "moderate" },
+      acceptedRisks: [
+        { cve: "CVE-2023-1234", reason: "Not applicable to this app.", decidedBy: "alice" },
+      ],
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.decision).toBe("accepted-risk");
+    expect(result[0]?.reason).toBe("Not applicable to this app.");
+  });
+});

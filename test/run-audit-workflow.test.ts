@@ -21,6 +21,14 @@ jest.mock("../src/classify/classify", () => ({
   classify: jest.fn(),
 }));
 
+jest.mock("../src/classify/loadPolicy", () => ({
+  loadPolicy: jest.fn().mockResolvedValue({
+    autoPatch: { minSeverity: "low", maxSeverity: "moderate" },
+    autoMergePatchLevel: false,
+    acceptedRisks: [],
+  }),
+}));
+
 jest.mock("node:fs/promises", () => ({
   readFile: jest.fn(),
   writeFile: jest.fn(),

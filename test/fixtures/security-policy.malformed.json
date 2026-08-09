@@ -1,0 +1,6 @@
+{
+  "autoPatch": {
+    "minSeverity": "banana",
+    "maxSeverity": "moderate"
+  }
+}

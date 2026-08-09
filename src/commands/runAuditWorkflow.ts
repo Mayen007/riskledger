@@ -1,5 +1,6 @@
-import type { AuditFinding, ClassifiedFinding, ClassificationPolicy } from "../shared/types";
+import type { AuditFinding, ClassifiedFinding } from "../shared/types";
 import { classify } from "../classify/classify";
+import { loadPolicy } from "../classify/loadPolicy";
 import { appendToRiskLog } from "../actions/appendToRiskLog";
 import { openPatchPR, type PullRequestWriter, type RepositoryRef } from "../actions/openPatchPR";
 import { postRiskComment, type IssueCommentWriter } from "../actions/postRiskComment";
@@ -39,12 +40,6 @@ export interface WorkflowContext {
   };
 }
 
-const defaultPolicy: ClassificationPolicy = {
-  autoPatch: {
-    minSeverity: "low",
-    maxSeverity: "moderate",
-  },
-};
 
 function repositoryRef(context: WorkflowContext): RepositoryRef {
   return {
@@ -85,6 +80,7 @@ async function classifyRepository(
     return [];
   }
 
+  const policy = await loadPolicy(cwd);
   const allFindings: AuditFinding[] = [];
 
   if (ecosystems.includes("npm")) {
@@ -97,7 +93,7 @@ async function classifyRepository(
     log.info({ repository }, "pip ecosystem detected — pip-audit backend not yet implemented, skipping");
   }
 
-  return classify(allFindings, defaultPolicy);
+  return classify(allFindings, policy);
 }
 
 async function getInstallationToken(context: WorkflowContext): Promise<string> {

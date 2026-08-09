@@ -18,8 +18,23 @@ function hasSafeFix(finding: AuditFinding): boolean {
   return finding.fixAvailable || Boolean(finding.patchedVersions?.length);
 }
 
+function isAcceptedRisk(finding: AuditFinding, policy: ClassificationPolicy): string | undefined {
+  return policy.acceptedRisks?.find(
+    (entry) => String(entry.cve) === String(finding.advisoryId),
+  )?.reason;
+}
+
 export function classify(findings: AuditFinding[], policy: ClassificationPolicy): ClassifiedFinding[] {
   return findings.map((finding) => {
+    const acceptedReason = isAcceptedRisk(finding, policy);
+    if (acceptedReason !== undefined) {
+      return {
+        finding,
+        decision: "accepted-risk",
+        reason: acceptedReason,
+      } satisfies ClassifiedFinding;
+    }
+
     if (hasSafeFix(finding) && isWithinAutoPatchWindow(finding.severity, policy)) {
       return {
         finding,
