@@ -49,6 +49,9 @@ export async function withRepoCheckout<T>(
       // any interactive prompt (works across all credential helpers).
       // GCM_INTERACTIVE=never — explicitly disables the Windows Git Credential
       // Manager GUI ("Select an account" dialog) on Windows servers.
+      // -c credential.allowUnsafeCredentialHelper=true — newer Git for Windows
+      // / GCM v2.x requires this flag before accepting a credential.helper
+      // override via -c. Without it the clone is rejected immediately.
       // -c credential.helper= — clears any system/global credential helper for
       // this clone so git uses the token already embedded in the URL directly,
       // without consulting GCM or any other helper.
@@ -59,6 +62,8 @@ export async function withRepoCheckout<T>(
           GCM_INTERACTIVE: "never",
         })
         .clone(authenticatedUrl, tempDir, [
+          "-c",
+          "credential.allowUnsafeCredentialHelper=true",
           "-c",
           "credential.helper=",
           "--depth",

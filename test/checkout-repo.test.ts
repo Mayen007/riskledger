@@ -69,6 +69,7 @@ describe("withRepoCheckout", () => {
     expect(calledUrl).toContain(`x-access-token:${TOKEN}@`);
     expect(calledUrl).toContain("github.com/Mayen007/reviwa.git");
     expect(calledArgs).toContain("-c");
+    expect(calledArgs).toContain("credential.allowUnsafeCredentialHelper=true");
     expect(calledArgs).toContain("credential.helper=");
     expect(calledArgs).toContain("--depth");
     expect(calledArgs).toContain("1");
@@ -92,12 +93,15 @@ describe("withRepoCheckout", () => {
       GCM_INTERACTIVE: "never",
     });
 
-    // The clone args must include -c credential.helper= as a discrete pair
-    // (so git doesn't invoke any credential helper for this clone)
+    // The clone args must include -c credential.allowUnsafeCredentialHelper=true
+    // before -c credential.helper= (so git permits and then clears the helper)
     const [, , cloneArgs] = mockClone.mock.calls[0] as [string, string, string[]];
-    const credHelperIndex = cloneArgs.indexOf("-c");
-    expect(credHelperIndex).toBeGreaterThanOrEqual(0);
-    expect(cloneArgs[credHelperIndex + 1]).toBe("credential.helper=");
+    const allowUnsafeIndex = cloneArgs.indexOf("credential.allowUnsafeCredentialHelper=true");
+    expect(allowUnsafeIndex).toBeGreaterThan(0);
+    expect(cloneArgs[allowUnsafeIndex - 1]).toBe("-c");
+    const credHelperIndex = cloneArgs.indexOf("credential.helper=");
+    expect(credHelperIndex).toBeGreaterThan(allowUnsafeIndex);
+    expect(cloneArgs[credHelperIndex - 1]).toBe("-c");
   });
 
   it("passes the temp directory as cwd to the callback", async () => {
