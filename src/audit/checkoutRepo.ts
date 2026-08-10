@@ -47,26 +47,24 @@ export async function withRepoCheckout<T>(
     try {
       // GIT_TERMINAL_PROMPT=0 — git fails immediately instead of blocking on
       // any interactive prompt (works across all credential helpers).
-      // GCM_INTERACTIVE=never — explicitly disables the Windows Git Credential
-      // Manager GUI ("Select an account" dialog) on Windows servers.
+      // GCM_INTERACTIVE=never — explicitly tells GCM not to open a GUI prompt.
       //
-      // Git 2.39+ / GCM v2.x rejects `-c credential.helper=` even when
-      // `credential.allowUnsafeCredentialHelper=true` is also in the same -c
-      // chain, because the guard runs before -c processing completes. Using
-      // GIT_CONFIG_COUNT/KEY/VALUE env vars injects config at "system" level
-      // before the guard check fires, reliably clearing the helper without
-      // triggering the "not permitted without enabling allowUnsafeCredentialHelper"
-      // error on Windows dev machines and CI alike.
+      // GIT_CONFIG_NOSYSTEM=1 + GIT_CONFIG_GLOBAL="" — prevents Git from
+      // loading system and global config files. This is the key fix: on
+      // Windows, GCM's credential helper is registered in system/global
+      // config. By not loading those configs, no credential helper is
+      // registered, so Git uses the token already embedded in the URL
+      // directly — no credential.helper override needed, no
+      // allowUnsafeCredentialHelper guard triggered, no EDITOR guard
+      // triggered. This avoids the whack-a-mole of fighting each new
+      // security guard that Git 2.39+ / 2.50+ adds.
       await simpleGit()
         .env({
           ...process.env,
           GIT_TERMINAL_PROMPT: "0",
           GCM_INTERACTIVE: "never",
-          GIT_CONFIG_COUNT: "2",
-          GIT_CONFIG_KEY_0: "credential.allowUnsafeCredentialHelper",
-          GIT_CONFIG_VALUE_0: "true",
-          GIT_CONFIG_KEY_1: "credential.helper",
-          GIT_CONFIG_VALUE_1: "",
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "",
         })
         .clone(authenticatedUrl, tempDir, [
           "--depth",
