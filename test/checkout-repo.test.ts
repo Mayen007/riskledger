@@ -68,40 +68,39 @@ describe("withRepoCheckout", () => {
 
     expect(calledUrl).toContain(`x-access-token:${TOKEN}@`);
     expect(calledUrl).toContain("github.com/Mayen007/reviwa.git");
-    expect(calledArgs).toContain("-c");
-    expect(calledArgs).toContain("credential.allowUnsafeCredentialHelper=true");
-    expect(calledArgs).toContain("credential.helper=");
+    // Credential helper suppression is done via env vars (GIT_CONFIG_NOSYSTEM /
+    // GIT_CONFIG_GLOBAL), not -c flags — clone args are shallow-clone only.
+    expect(calledArgs).not.toContain("-c");
     expect(calledArgs).toContain("--depth");
     expect(calledArgs).toContain("1");
     expect(calledArgs).toContain("--branch");
     expect(calledArgs).toContain(REF);
   });
 
-  it("sets GIT_TERMINAL_PROMPT=0, GCM_INTERACTIVE=never, and credential.helper= to prevent any interactive credential prompt", async () => {
+  it("sets GIT_TERMINAL_PROMPT=0, GCM_INTERACTIVE=never, GIT_CONFIG_NOSYSTEM=1, and GIT_CONFIG_GLOBAL='' to prevent any interactive credential prompt", async () => {
     await withRepoCheckout({ cloneUrl: CLONE_URL, token: TOKEN, ref: REF }, async () => undefined);
 
     const mockEnv = getMockEnv();
-    const mockClone = getMockClone();
 
     // .env() must have been called (exactly once, by the chained call)
     expect(mockEnv).toHaveBeenCalledTimes(1);
     const envArg = mockEnv.mock.calls[0][0] as Record<string, string>;
 
-    // Both env vars must be present and set to the correct suppression values
+    // All four env vars must be present with correct values.
+    // GIT_CONFIG_NOSYSTEM + GIT_CONFIG_GLOBAL prevent system/global config from
+    // loading, which is where GCM's credential helper is registered on Windows —
+    // no config loaded means no credential helper, no -c override needed, and no
+    // allowUnsafeCredentialHelper / EDITOR guards triggered.
     expect(envArg).toMatchObject({
       GIT_TERMINAL_PROMPT: "0",
       GCM_INTERACTIVE: "never",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "",
     });
 
-    // The clone args must include -c credential.allowUnsafeCredentialHelper=true
-    // before -c credential.helper= (so git permits and then clears the helper)
-    const [, , cloneArgs] = mockClone.mock.calls[0] as [string, string, string[]];
-    const allowUnsafeIndex = cloneArgs.indexOf("credential.allowUnsafeCredentialHelper=true");
-    expect(allowUnsafeIndex).toBeGreaterThan(0);
-    expect(cloneArgs[allowUnsafeIndex - 1]).toBe("-c");
-    const credHelperIndex = cloneArgs.indexOf("credential.helper=");
-    expect(credHelperIndex).toBeGreaterThan(allowUnsafeIndex);
-    expect(cloneArgs[credHelperIndex - 1]).toBe("-c");
+    // No -c flags — credential helper suppression is purely env-var based.
+    const [, , cloneArgs] = mockEnv.mock.calls[0] as unknown as [unknown, unknown, string[]];
+    void cloneArgs; // checked in the URL/args test above
   });
 
   it("passes the temp directory as cwd to the callback", async () => {
