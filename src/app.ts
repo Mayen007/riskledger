@@ -2,6 +2,7 @@ import type { Probot } from "probot";
 
 import { handleIssueComment } from "./commands/handleIssueComment";
 import { CheckoutError, handlePullRequest, handlePush } from "./commands/runAuditWorkflow";
+import { scheduleWeeklyDigest } from "./commands/scheduleWeeklyDigest";
 
 export default function registerApp(app: Probot): void {
   app.on("push", async (context) => {
@@ -69,4 +70,8 @@ export default function registerApp(app: Probot): void {
       throw error;
     }
   });
+
+  // Schedule the weekly security digest. Runs once at server start-up using
+  // this Probot instance. Schedule is configurable via DIGEST_CRON env var.
+  scheduleWeeklyDigest(app);
 }

@@ -10,6 +10,10 @@ jest.mock("../src/commands/handleIssueComment", () => ({
   handleIssueComment: jest.fn(),
 }));
 
+jest.mock("../src/commands/scheduleWeeklyDigest", () => ({
+  scheduleWeeklyDigest: jest.fn(),
+}));
+
 import { handlePush } from "../src/commands/runAuditWorkflow";
 const mockedHandlePush = jest.mocked(handlePush);
 

@@ -39,7 +39,27 @@ jest.mock("../src/classify/classify", () => ({
 jest.mock("node:fs/promises", () => ({
   readFile: jest.fn(),
   writeFile: jest.fn(),
+  mkdir: jest.fn().mockResolvedValue(undefined),
 }));
+
+// Mock writeStatusBadge so badge/stats writes don't touch the filesystem.
+jest.mock("../src/actions/writeStatusBadge", () => ({
+  writeStatusBadge: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock simple-git used by commitBadge so no real git operations run.
+jest.mock("simple-git", () => {
+  const mockGit = {
+    env: jest.fn(),
+    addConfig: jest.fn().mockResolvedValue(undefined),
+    add: jest.fn().mockResolvedValue(undefined),
+    status: jest.fn().mockResolvedValue({ staged: [] }),
+    commit: jest.fn().mockResolvedValue(undefined),
+    push: jest.fn().mockResolvedValue(undefined),
+  };
+  mockGit.env.mockReturnValue(mockGit);
+  return { default: jest.fn(() => mockGit), __esModule: true };
+});
 
 jest.mock("../src/audit/checkoutRepo", () => ({
   withRepoCheckout: jest.fn(

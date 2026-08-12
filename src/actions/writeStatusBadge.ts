@@ -50,9 +50,11 @@ export function buildBadge(
 }
 
 /**
- * Writes `.riskledger/badge.json` (shields.io endpoint format) into `cwd`.
- * The file is intended to be committed to the target repo so a shields.io
- * endpoint badge can reference it directly via the raw GitHub URL.
+ * Writes `.riskledger/badge.json` (shields.io endpoint format) and
+ * `.riskledger/stats.json` (full DigestStats + timestamp) into `cwd`.
+ *
+ * badge.json is used by shields.io; stats.json is read by the weekly digest
+ * cron job so it can report counts without re-running an audit.
  */
 export async function writeStatusBadge(
   cwd: string,
@@ -61,6 +63,12 @@ export async function writeStatusBadge(
 ): Promise<void> {
   const dir = join(cwd, ".riskledger");
   await mkdir(dir, { recursive: true });
+
   const badge = buildBadge(stats, hasHighOrCritical);
   await writeFile(join(dir, "badge.json"), JSON.stringify(badge, null, 2) + "\n", "utf8");
+
+  // Write the full stats so the weekly digest cron can read them without
+  // re-cloning the repo. updatedAt records when the last audit ran.
+  const statsPayload = { ...stats, updatedAt: new Date().toISOString() };
+  await writeFile(join(dir, "stats.json"), JSON.stringify(statsPayload, null, 2) + "\n", "utf8");
 }

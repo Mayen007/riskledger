@@ -113,7 +113,7 @@ async function commitBadge(
   });
   await git.addConfig("user.name", "riskledger[bot]");
   await git.addConfig("user.email", "riskledger[bot]@users.noreply.github.com");
-  await git.add(".riskledger/badge.json");
+  await git.add(".riskledger/");
 
   const status = await git.status();
   if (status.staged.length === 0) {

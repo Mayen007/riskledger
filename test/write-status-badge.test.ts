@@ -83,23 +83,49 @@ describe("writeStatusBadge", () => {
 
   it("writes badge.json inside .riskledger/", async () => {
     await writeStatusBadge("/tmp/repo", zeroStats, false);
-    const [filePath, content] = mockedWriteFile.mock.calls[0] as [string, string, string];
-    expect(filePath).toMatch(/\.riskledger[/\\]badge\.json$/);
-    const parsed = JSON.parse(content) as unknown;
+    const badgeCall = mockedWriteFile.mock.calls.find(
+      ([p]) => String(p).endsWith("badge.json"),
+    ) as [string, string, string] | undefined;
+    expect(badgeCall).toBeDefined();
+    const parsed = JSON.parse(badgeCall![1]) as unknown;
     expect(parsed).toMatchObject({ schemaVersion: 1, label: "security" });
+  });
+
+  it("writes stats.json inside .riskledger/ with full DigestStats and updatedAt", async () => {
+    await writeStatusBadge("/tmp/repo", openStats, false);
+    const statsCall = mockedWriteFile.mock.calls.find(
+      ([p]) => String(p).endsWith("stats.json"),
+    ) as [string, string, string] | undefined;
+    expect(statsCall).toBeDefined();
+    const parsed = JSON.parse(statsCall![1]) as {
+      patchable: number;
+      needsReview: number;
+      acceptedRisk: number;
+      total: number;
+      updatedAt: string;
+    };
+    expect(parsed.patchable).toBe(openStats.patchable);
+    expect(parsed.needsReview).toBe(openStats.needsReview);
+    expect(parsed.acceptedRisk).toBe(openStats.acceptedRisk);
+    expect(parsed.total).toBe(openStats.total);
+    expect(new Date(parsed.updatedAt).toISOString()).toBe(parsed.updatedAt);
   });
 
   it("writes 'red' badge for high/critical findings", async () => {
     await writeStatusBadge("/tmp/repo", openStats, true);
-    const [, content] = mockedWriteFile.mock.calls[0] as [string, string, string];
-    const parsed = JSON.parse(content) as { color: string };
+    const badgeCall = mockedWriteFile.mock.calls.find(
+      ([p]) => String(p).endsWith("badge.json"),
+    ) as [string, string, string] | undefined;
+    const parsed = JSON.parse(badgeCall![1]) as { color: string };
     expect(parsed.color).toBe("red");
   });
 
   it("writes 'brightgreen' badge when no open findings", async () => {
     await writeStatusBadge("/tmp/repo", zeroStats, false);
-    const [, content] = mockedWriteFile.mock.calls[0] as [string, string, string];
-    const parsed = JSON.parse(content) as { color: string; message: string };
+    const badgeCall = mockedWriteFile.mock.calls.find(
+      ([p]) => String(p).endsWith("badge.json"),
+    ) as [string, string, string] | undefined;
+    const parsed = JSON.parse(badgeCall![1]) as { color: string; message: string };
     expect(parsed.color).toBe("brightgreen");
     expect(parsed.message).toBe("secure");
   });
