@@ -43,6 +43,25 @@ jest.mock("node:fs/promises", () => ({
   writeFile: jest.fn(),
 }));
 
+// Mock writeStatusBadge so badge writes don't touch the filesystem in tests.
+jest.mock("../src/actions/writeStatusBadge", () => ({
+  writeStatusBadge: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock simple-git used by commitBadge so no real git operations run in tests.
+jest.mock("simple-git", () => {
+  const mockGit = {
+    env: jest.fn(),
+    addConfig: jest.fn().mockResolvedValue(undefined),
+    add: jest.fn().mockResolvedValue(undefined),
+    status: jest.fn().mockResolvedValue({ staged: [] }),
+    commit: jest.fn().mockResolvedValue(undefined),
+    push: jest.fn().mockResolvedValue(undefined),
+  };
+  mockGit.env.mockReturnValue(mockGit);
+  return { default: jest.fn(() => mockGit), __esModule: true };
+});
+
 // Mock withRepoCheckout so tests don't actually clone — just invoke the callback
 // with process.cwd(), preserving the existing test behavior.
 jest.mock("../src/audit/checkoutRepo", () => ({

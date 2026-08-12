@@ -8,6 +8,16 @@ export default function registerApp(app: Probot): void {
     const repository = context.payload.repository.full_name;
     const ref = context.payload.ref;
 
+    // Skip push events triggered by RiskLedger's own badge commits to prevent
+    // a self-triggering audit loop. The badge commit uses the prefix
+    // "chore(riskledger):" so it can be detected here without storing state.
+    const headCommitMessage: string =
+      (context.payload as { head_commit?: { message?: string } }).head_commit?.message ?? "";
+    if (headCommitMessage.startsWith("chore(riskledger):")) {
+      app.log.info({ repository }, "Skipping push triggered by RiskLedger bot commit");
+      return;
+    }
+
     app.log.info({ repository, ref }, "Received push event");
 
     try {

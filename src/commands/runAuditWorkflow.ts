@@ -5,6 +5,8 @@ import { dedup } from "../classify/dedup";
 import { appendToRiskLog } from "../actions/appendToRiskLog";
 import { openPatchPR, type PullRequestWriter, type RepositoryRef } from "../actions/openPatchPR";
 import { postRiskComment, type IssueCommentWriter } from "../actions/postRiskComment";
+import { writeStatusBadge } from "../actions/writeStatusBadge";
+import { computeDigestStats } from "../shared/computeDigestStats";
 import { runAuditNpm } from "../audit/runAuditNpm";
 import { runAuditPip } from "../audit/runAuditPip";
 import { withRepoCheckout, CheckoutError } from "../audit/checkoutRepo";
@@ -12,6 +14,7 @@ import { detectEcosystems } from "../audit/detectEcosystems";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
+import simpleGit from "simple-git";
 
 export { CheckoutError };
 
@@ -83,6 +86,45 @@ async function persistRiskLog(cwd: string, findings: ClassifiedFinding[]): Promi
   await writeFile(riskLogPath, updatedLog, "utf8");
 }
 
+/**
+ * Writes the shields.io badge JSON and commits + pushes it back to the repo.
+ * The commit message prefix `chore(riskledger):` is detected by the push
+ * handler in app.ts to skip re-auditing on this bot-authored commit.
+ */
+async function commitBadge(
+  cwd: string,
+  classified: ClassifiedFinding[],
+  token: string,
+  cloneUrl: string,
+): Promise<void> {
+  const stats = computeDigestStats(classified);
+  const hasHighOrCritical = classified.some(
+    (cf) => cf.finding.severity === "high" || cf.finding.severity === "critical",
+  );
+  await writeStatusBadge(cwd, stats, hasHighOrCritical);
+
+  const authenticatedUrl = cloneUrl.replace(/^https:\/\//, `https://x-access-token:${token}@`);
+  const git = simpleGit(cwd).env({
+    ...process.env,
+    GIT_TERMINAL_PROMPT: "0",
+    GCM_INTERACTIVE: "never",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "",
+  });
+  await git.addConfig("user.name", "riskledger[bot]");
+  await git.addConfig("user.email", "riskledger[bot]@users.noreply.github.com");
+  await git.add(".riskledger/badge.json");
+
+  const status = await git.status();
+  if (status.staged.length === 0) {
+    // Badge unchanged — nothing to commit.
+    return;
+  }
+
+  await git.commit("chore(riskledger): update security badge");
+  await git.push(authenticatedUrl, "HEAD");
+}
+
 async function classifyRepository(
   cwd: string,
   log: WorkflowContext["log"],
@@ -121,11 +163,13 @@ export async function handlePush(context: WorkflowContext): Promise<void> {
   const repoLabel = `${repository.owner}/${repository.repo}`;
   const token = await getInstallationToken(context);
   const ref = context.payload.ref.replace(/^refs\/heads\//, "");
+  const cloneUrl = context.payload.repository.clone_url;
 
   const patchableFindings = await withRepoCheckout(
-    { cloneUrl: context.payload.repository.clone_url, token, ref },
+    { cloneUrl, token, ref },
     async (cwd) => {
       const classified = await classifyRepository(cwd, context.log, repoLabel);
+      await commitBadge(cwd, classified, token, cloneUrl);
       return selectPatchableFindings(classified);
     },
   );
@@ -179,12 +223,15 @@ export async function handlePullRequest(context: WorkflowContext): Promise<void>
   const token = await getInstallationToken(context);
   const ref = pr.head.sha ?? pr.head.ref;
 
+  const cloneUrl = context.payload.repository.clone_url;
+
   const reviewFindings = await withRepoCheckout(
-    { cloneUrl: context.payload.repository.clone_url, token, ref },
+    { cloneUrl, token, ref },
     async (cwd) => {
       const classified = await classifyRepository(cwd, context.log, repoLabel);
       const review = selectReviewFindings(classified);
       await persistRiskLog(cwd, review);
+      await commitBadge(cwd, classified, token, cloneUrl);
       return review;
     },
   );
