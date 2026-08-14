@@ -58,9 +58,8 @@ export async function withRepoCheckout<T>(
       // allowUnsafeCredentialHelper guard triggered, no EDITOR guard
       // triggered. This avoids the whack-a-mole of fighting each new
       // security guard that Git 2.39+ / 2.50+ adds.
-      await simpleGit()
+      await simpleGit({ unsafe: { allowUnsafeConfigPaths: true } })
         .env({
-          ...process.env,
           GIT_TERMINAL_PROMPT: "0",
           GCM_INTERACTIVE: "never",
           GIT_CONFIG_NOSYSTEM: "1",

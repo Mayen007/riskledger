@@ -104,8 +104,10 @@ async function commitBadge(
   await writeStatusBadge(cwd, stats, hasHighOrCritical);
 
   const authenticatedUrl = cloneUrl.replace(/^https:\/\//, `https://x-access-token:${token}@`);
-  const git = simpleGit(cwd).env({
-    ...process.env,
+  const git = simpleGit({
+    baseDir: cwd,
+    unsafe: { allowUnsafeConfigPaths: true },
+  }).env({
     GIT_TERMINAL_PROMPT: "0",
     GCM_INTERACTIVE: "never",
     GIT_CONFIG_NOSYSTEM: "1",
