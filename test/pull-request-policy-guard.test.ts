@@ -76,6 +76,7 @@ jest.mock("../src/audit/checkoutRepo", () => ({
 
 jest.mock("../src/audit/detectEcosystems", () => ({
   detectEcosystems: jest.fn().mockResolvedValue(["npm"]),
+  findManifestDirectories: jest.fn().mockResolvedValue({ npm: [process.cwd()], pip: [] }),
 }));
 
 const mockedRunAuditNpm = jest.mocked(runAuditNpm);

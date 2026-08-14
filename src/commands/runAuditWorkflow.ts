@@ -10,7 +10,7 @@ import { computeDigestStats } from "../shared/computeDigestStats";
 import { runAuditNpm } from "../audit/runAuditNpm";
 import { runAuditPip } from "../audit/runAuditPip";
 import { withRepoCheckout, CheckoutError } from "../audit/checkoutRepo";
-import { detectEcosystems } from "../audit/detectEcosystems";
+import { findManifestDirectories } from "../audit/detectEcosystems";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
@@ -27,7 +27,7 @@ export interface PullRequestFilesReader {
     owner: string;
     repo: string;
     pull_number: number;
-    per_page: number;
+    per_page?: number;
   }) => Promise<{ data: Array<{ filename: string }> }>;
 }
 
@@ -132,9 +132,9 @@ async function classifyRepository(
   log: WorkflowContext["log"],
   repository: string,
 ): Promise<ClassifiedFinding[]> {
-  const ecosystems = await detectEcosystems(cwd);
+  const manifests = await findManifestDirectories(cwd);
 
-  if (ecosystems.length === 0) {
+  if (manifests.npm.length === 0 && manifests.pip.length === 0) {
     log.warn({ repository }, "No known package manifests found in repository — skipping audit");
     return [];
   }
@@ -142,14 +142,22 @@ async function classifyRepository(
   const policy = await loadPolicy(cwd);
   const allFindings: AuditFinding[] = [];
 
-  if (ecosystems.includes("npm")) {
-    const findings = await runAuditNpm(cwd);
-    allFindings.push(...findings);
+  for (const npmDir of manifests.npm) {
+    try {
+      const findings = await runAuditNpm(npmDir);
+      allFindings.push(...findings);
+    } catch (error) {
+      log.warn({ repository, dir: npmDir, error: String(error) }, "Failed to run npm audit in directory");
+    }
   }
 
-  if (ecosystems.includes("pip")) {
-    const findings = await runAuditPip(cwd);
-    allFindings.push(...findings);
+  for (const pipDir of manifests.pip) {
+    try {
+      const findings = await runAuditPip(pipDir);
+      allFindings.push(...findings);
+    } catch (error) {
+      log.warn({ repository, dir: pipDir, error: String(error) }, "Failed to run pip audit in directory");
+    }
   }
 
   return classify(dedup(allFindings), policy);

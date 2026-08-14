@@ -77,9 +77,10 @@ jest.mock("../src/audit/checkoutRepo", () => ({
   },
 }));
 
-// detectEcosystems mock: always return ["npm"] so runAuditNpm is always called
+// detectEcosystems mock: always return npm directory so runAuditNpm is called
 jest.mock("../src/audit/detectEcosystems", () => ({
   detectEcosystems: jest.fn().mockResolvedValue(["npm"]),
+  findManifestDirectories: jest.fn().mockResolvedValue({ npm: [process.cwd()], pip: [] }),
 }));
 
 const mockedRunAuditNpm = jest.mocked(runAuditNpm);
@@ -218,5 +219,74 @@ describe("runAuditWorkflow", () => {
       "utf8",
     );
     expect(mockedOpenPatchPR).not.toHaveBeenCalled();
+  });
+
+  it("audits multiple discovered subdirectories and aggregates findings", async () => {
+    const { findManifestDirectories } = jest.requireMock("../src/audit/detectEcosystems");
+    findManifestDirectories.mockResolvedValueOnce({
+      npm: ["/repo/client", "/repo/server"],
+      pip: [],
+    });
+
+    const context = createContext();
+
+    mockedRunAuditNpm
+      .mockResolvedValueOnce([
+        {
+          ecosystem: "npm",
+          packageName: "client-dep",
+          severity: "moderate",
+          advisoryId: 10,
+          title: "client-dep vuln",
+          vulnerableVersions: "<1.0.0",
+          fixAvailable: true,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          ecosystem: "npm",
+          packageName: "server-dep",
+          severity: "moderate",
+          advisoryId: 20,
+          title: "server-dep vuln",
+          vulnerableVersions: "<2.0.0",
+          fixAvailable: true,
+        },
+      ]);
+
+    mockedClassify.mockReturnValue([
+      {
+        finding: {
+          ecosystem: "npm",
+          packageName: "client-dep",
+          severity: "moderate",
+          advisoryId: 10,
+          title: "client-dep vuln",
+          vulnerableVersions: "<1.0.0",
+          fixAvailable: true,
+        },
+        decision: "patchable",
+        reason: "Auto patchable",
+      },
+      {
+        finding: {
+          ecosystem: "npm",
+          packageName: "server-dep",
+          severity: "moderate",
+          advisoryId: 20,
+          title: "server-dep vuln",
+          vulnerableVersions: "<2.0.0",
+          fixAvailable: true,
+        },
+        decision: "patchable",
+        reason: "Auto patchable",
+      },
+    ]);
+
+    await handlePush(context);
+
+    expect(mockedRunAuditNpm).toHaveBeenCalledWith("/repo/client");
+    expect(mockedRunAuditNpm).toHaveBeenCalledWith("/repo/server");
+    expect(mockedOpenPatchPR).toHaveBeenCalled();
   });
 });
