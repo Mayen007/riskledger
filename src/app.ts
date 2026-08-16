@@ -3,6 +3,7 @@ import type { Probot } from "probot";
 import { handleIssueComment } from "./commands/handleIssueComment";
 import { CheckoutError, handlePullRequest, handlePush } from "./commands/runAuditWorkflow";
 import { scheduleWeeklyDigest } from "./commands/scheduleWeeklyDigest";
+import { getRateLimitDetails } from "./shared/rateLimit";
 
 export default function registerApp(app: Probot): void {
   app.on("push", async (context) => {
@@ -29,6 +30,19 @@ export default function registerApp(app: Probot): void {
         return;
       }
 
+      const rateLimit = getRateLimitDetails(error);
+      if (rateLimit.isRateLimit) {
+        app.log.warn(
+          {
+            repository,
+            retryAfterSeconds: rateLimit.retryAfterSeconds !== undefined ? String(rateLimit.retryAfterSeconds) : undefined,
+            isSecondary: String(rateLimit.isSecondary),
+          },
+          `GitHub API rate limit encountered (${rateLimit.isSecondary ? "secondary" : "primary"}). Skipping push workflow.`,
+        );
+        return;
+      }
+
       throw error;
     }
   });
@@ -44,6 +58,19 @@ export default function registerApp(app: Probot): void {
     } catch (error) {
       if (error instanceof CheckoutError) {
         app.log.warn({ repository, error: error.message }, "Skipping pull_request.opened workflow because the checkout failed");
+        return;
+      }
+
+      const rateLimit = getRateLimitDetails(error);
+      if (rateLimit.isRateLimit) {
+        app.log.warn(
+          {
+            repository,
+            retryAfterSeconds: rateLimit.retryAfterSeconds !== undefined ? String(rateLimit.retryAfterSeconds) : undefined,
+            isSecondary: String(rateLimit.isSecondary),
+          },
+          `GitHub API rate limit encountered (${rateLimit.isSecondary ? "secondary" : "primary"}). Skipping pull_request.opened workflow.`,
+        );
         return;
       }
 
@@ -64,6 +91,19 @@ export default function registerApp(app: Probot): void {
     } catch (error) {
       if (error instanceof CheckoutError) {
         app.log.warn({ repository, error: error.message }, "Skipping issue_comment workflow because the checkout failed");
+        return;
+      }
+
+      const rateLimit = getRateLimitDetails(error);
+      if (rateLimit.isRateLimit) {
+        app.log.warn(
+          {
+            repository,
+            retryAfterSeconds: rateLimit.retryAfterSeconds !== undefined ? String(rateLimit.retryAfterSeconds) : undefined,
+            isSecondary: String(rateLimit.isSecondary),
+          },
+          `GitHub API rate limit encountered (${rateLimit.isSecondary ? "secondary" : "primary"}). Skipping issue_comment workflow.`,
+        );
         return;
       }
 

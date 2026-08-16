@@ -50,6 +50,14 @@ describe("appendAcceptedRisk", () => {
         path: ".security-policy.json",
         sha: "abc123",
         message: expect.stringContaining("GHSA-xxxx-yyyy-zzzz"),
+        committer: {
+          name: "riskledger[bot]",
+          email: "riskledger[bot]@users.noreply.github.com",
+        },
+        author: {
+          name: "riskledger[bot]",
+          email: "riskledger[bot]@users.noreply.github.com",
+        },
       }),
     );
 

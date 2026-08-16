@@ -289,4 +289,36 @@ describe("runAuditWorkflow", () => {
     expect(mockedRunAuditNpm).toHaveBeenCalledWith("/repo/server");
     expect(mockedOpenPatchPR).toHaveBeenCalled();
   });
+
+  it("configures GPG commit signing when GIT_SIGN_COMMITS and GPG_KEY_ID are set", async () => {
+    const originalSign = process.env.GIT_SIGN_COMMITS;
+    const originalKey = process.env.GPG_KEY_ID;
+    process.env.GIT_SIGN_COMMITS = "true";
+    process.env.GPG_KEY_ID = "ABC12345";
+
+    const simpleGit = (await import("simple-git")).default;
+    const gitInstance = simpleGit();
+
+    const context = createContext();
+    mockedRunAuditNpm.mockResolvedValue([]);
+    mockedClassify.mockReturnValue([]);
+
+    try {
+      await handlePush(context);
+
+      expect(gitInstance.addConfig).toHaveBeenCalledWith("commit.gpgsign", "true");
+      expect(gitInstance.addConfig).toHaveBeenCalledWith("user.signingkey", "ABC12345");
+    } finally {
+      if (originalSign === undefined) {
+        delete process.env.GIT_SIGN_COMMITS;
+      } else {
+        process.env.GIT_SIGN_COMMITS = originalSign;
+      }
+      if (originalKey === undefined) {
+        delete process.env.GPG_KEY_ID;
+      } else {
+        process.env.GPG_KEY_ID = originalKey;
+      }
+    }
+  });
 });

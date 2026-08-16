@@ -16,6 +16,8 @@ export interface PolicyFileClient {
     message: string;
     content: string;
     sha?: string;
+    committer?: { name: string; email: string };
+    author?: { name: string; email: string };
   }) => Promise<unknown>;
 }
 
@@ -86,5 +88,13 @@ export async function appendAcceptedRisk(
     ].join("\n"),
     content,
     sha: existingSha,
+    committer: {
+      name: "riskledger[bot]",
+      email: "riskledger[bot]@users.noreply.github.com",
+    },
+    author: {
+      name: "riskledger[bot]",
+      email: "riskledger[bot]@users.noreply.github.com",
+    },
   });
 }

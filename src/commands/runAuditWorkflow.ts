@@ -11,6 +11,7 @@ import { runAuditNpm } from "../audit/runAuditNpm";
 import { runAuditPip } from "../audit/runAuditPip";
 import { withRepoCheckout, CheckoutError } from "../audit/checkoutRepo";
 import { findManifestDirectories } from "../audit/detectEcosystems";
+import { runInBatches } from "../shared/batch";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
@@ -115,6 +116,14 @@ async function commitBadge(
   });
   await git.addConfig("user.name", "riskledger[bot]");
   await git.addConfig("user.email", "riskledger[bot]@users.noreply.github.com");
+
+  if (process.env.GIT_SIGN_COMMITS === "true" || process.env.GPG_KEY_ID) {
+    await git.addConfig("commit.gpgsign", "true");
+    if (process.env.GPG_KEY_ID) {
+      await git.addConfig("user.signingkey", process.env.GPG_KEY_ID);
+    }
+  }
+
   await git.add(".riskledger/");
 
   const status = await git.status();
@@ -126,6 +135,8 @@ async function commitBadge(
   await git.commit("chore(riskledger): update security badge");
   await git.push(authenticatedUrl, "HEAD");
 }
+
+const AUDIT_BATCH_CONCURRENCY = 3;
 
 async function classifyRepository(
   cwd: string,
@@ -142,22 +153,28 @@ async function classifyRepository(
   const policy = await loadPolicy(cwd);
   const allFindings: AuditFinding[] = [];
 
-  for (const npmDir of manifests.npm) {
+  const npmResults = await runInBatches(manifests.npm, AUDIT_BATCH_CONCURRENCY, async (npmDir) => {
     try {
-      const findings = await runAuditNpm(npmDir);
-      allFindings.push(...findings);
+      return await runAuditNpm(npmDir);
     } catch (error) {
       log.warn({ repository, dir: npmDir, error: String(error) }, "Failed to run npm audit in directory");
+      return [];
     }
+  });
+  for (const res of npmResults) {
+    allFindings.push(...res);
   }
 
-  for (const pipDir of manifests.pip) {
+  const pipResults = await runInBatches(manifests.pip, AUDIT_BATCH_CONCURRENCY, async (pipDir) => {
     try {
-      const findings = await runAuditPip(pipDir);
-      allFindings.push(...findings);
+      return await runAuditPip(pipDir);
     } catch (error) {
       log.warn({ repository, dir: pipDir, error: String(error) }, "Failed to run pip audit in directory");
+      return [];
     }
+  });
+  for (const res of pipResults) {
+    allFindings.push(...res);
   }
 
   return classify(dedup(allFindings), policy);
