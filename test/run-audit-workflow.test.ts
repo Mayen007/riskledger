@@ -30,13 +30,25 @@ jest.mock("../src/classify/classify", () => ({
   classify: jest.fn(),
 }));
 
-jest.mock("../src/classify/loadPolicy", () => ({
-  loadPolicy: jest.fn().mockResolvedValue({
-    autoPatch: { minSeverity: "low", maxSeverity: "moderate" },
-    autoMergePatchLevel: false,
-    acceptedRisks: [],
-  }),
-}));
+jest.mock("../src/classify/loadPolicy", () => {
+  const original = jest.requireActual("../src/classify/loadPolicy");
+  return {
+    ...original,
+    loadPolicy: jest.fn().mockResolvedValue({
+      autoPatch: { minSeverity: "low", maxSeverity: "moderate" },
+      autoMergePatchLevel: false,
+      acceptedRisks: [],
+    }),
+  };
+});
+
+jest.mock("node:fs", () => {
+  const original = jest.requireActual("node:fs");
+  return {
+    ...original,
+    existsSync: jest.fn().mockReturnValue(false),
+  };
+});
 
 jest.mock("node:fs/promises", () => ({
   readFile: jest.fn(),
@@ -113,6 +125,9 @@ function createContext(overrides: Partial<Parameters<typeof handlePush>[0]> = {}
         },
         issues: {
           createComment: jest.fn(),
+        },
+        repos: {
+          getContent: jest.fn().mockRejectedValue({ status: 404 }),
         },
       },
       auth: jest.fn().mockResolvedValue({ token: "ghs_test" }),
@@ -320,5 +335,62 @@ describe("runAuditWorkflow", () => {
         process.env.GPG_KEY_ID = originalKey;
       }
     }
+  });
+
+  it("falls back to organization default policy when local policy is missing", async () => {
+    const orgPolicy = {
+      autoPatch: { minSeverity: "low" as const, maxSeverity: "high" as const },
+      autoMergePatchLevel: true,
+      acceptedRisks: [{ cve: "GHSA-org-default", reason: "Accepted by org", decidedBy: "admin" }],
+    };
+    const base64Policy = Buffer.from(JSON.stringify(orgPolicy)).toString("base64");
+
+    const context = createContext({
+      octokit: {
+        rest: {
+          pulls: {
+            create: jest.fn(),
+            listFiles: jest.fn().mockResolvedValue({ data: [] }),
+          },
+          issues: {
+            createComment: jest.fn(),
+          },
+          repos: {
+            getContent: jest.fn().mockResolvedValue({
+              data: { type: "file", encoding: "base64", content: base64Policy },
+            }),
+          },
+        },
+        auth: jest.fn().mockResolvedValue({ token: "ghs_test" }),
+      },
+    });
+
+    mockedRunAuditNpm.mockResolvedValue([
+      {
+        ecosystem: "npm",
+        packageName: "left-pad",
+        severity: "high",
+        advisoryId: 1,
+        title: "left-pad",
+        vulnerableVersions: "<1.3.0",
+        fixAvailable: true,
+      },
+    ]);
+    mockedClassify.mockReturnValue([]);
+
+    await handlePush(context);
+
+    expect(context.octokit.rest.repos?.getContent).toHaveBeenCalledWith({
+      owner: "owner",
+      repo: ".github",
+      path: ".security-policy.json",
+    });
+    expect(mockedClassify).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        autoPatch: { minSeverity: "low", maxSeverity: "high" },
+        autoMergePatchLevel: true,
+      }),
+    );
   });
 });

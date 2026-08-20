@@ -1,6 +1,6 @@
 import type { AuditFinding, ClassifiedFinding } from "../shared/types";
 import { classify } from "../classify/classify";
-import { loadPolicy } from "../classify/loadPolicy";
+import { loadPolicy, mergePolicies } from "../classify/loadPolicy";
 import { dedup } from "../classify/dedup";
 import { appendToRiskLog } from "../actions/appendToRiskLog";
 import { openPatchPR, type PullRequestWriter, type RepositoryRef } from "../actions/openPatchPR";
@@ -11,6 +11,7 @@ import { runAuditNpm } from "../audit/runAuditNpm";
 import { runAuditPip } from "../audit/runAuditPip";
 import { withRepoCheckout, CheckoutError } from "../audit/checkoutRepo";
 import { findManifestDirectories } from "../audit/detectEcosystems";
+import { fetchOrgPolicy, type OrgPolicyClient } from "../actions/fetchOrgPolicy";
 import { runInBatches } from "../shared/batch";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -50,6 +51,7 @@ export interface WorkflowContext {
     rest: {
       pulls: PullRequestWriter & PullRequestFilesReader;
       issues: IssueCommentWriter;
+      repos?: OrgPolicyClient;
     };
     auth: (options: { type: string }) => Promise<{ token: string }>;
   };
@@ -142,6 +144,8 @@ async function classifyRepository(
   cwd: string,
   log: WorkflowContext["log"],
   repository: string,
+  octokit?: WorkflowContext["octokit"],
+  owner?: string,
 ): Promise<ClassifiedFinding[]> {
   const manifests = await findManifestDirectories(cwd);
 
@@ -150,7 +154,31 @@ async function classifyRepository(
     return [];
   }
 
-  const policy = await loadPolicy(cwd);
+  const localPolicyExists = existsSync(resolve(cwd, ".security-policy.json"));
+  const localPolicy = await loadPolicy(cwd);
+
+  let effectivePolicy = localPolicy;
+  if (!localPolicyExists && octokit?.rest?.repos && owner) {
+    try {
+      const orgPolicy = await fetchOrgPolicy(octokit.rest.repos, owner);
+      if (orgPolicy) {
+        log.info({ repository, org: owner }, "Using organization default policy from .github repository");
+        effectivePolicy = orgPolicy;
+      }
+    } catch (err) {
+      log.warn({ repository, org: owner, error: String(err) }, "Failed to fetch organization default policy; using standard defaults");
+    }
+  } else if (localPolicyExists && octokit?.rest?.repos && owner) {
+    try {
+      const orgPolicy = await fetchOrgPolicy(octokit.rest.repos, owner);
+      if (orgPolicy) {
+        effectivePolicy = mergePolicies(orgPolicy, localPolicy);
+      }
+    } catch {
+      // Fallback safely to local policy if org policy retrieval fails
+    }
+  }
+
   const allFindings: AuditFinding[] = [];
 
   const npmResults = await runInBatches(manifests.npm, AUDIT_BATCH_CONCURRENCY, async (npmDir) => {
@@ -177,7 +205,7 @@ async function classifyRepository(
     allFindings.push(...res);
   }
 
-  return classify(dedup(allFindings), policy);
+  return classify(dedup(allFindings), effectivePolicy);
 }
 
 async function getInstallationToken(context: WorkflowContext): Promise<string> {
@@ -195,7 +223,13 @@ export async function handlePush(context: WorkflowContext): Promise<void> {
   const patchableFindings = await withRepoCheckout(
     { cloneUrl, token, ref },
     async (cwd) => {
-      const classified = await classifyRepository(cwd, context.log, repoLabel);
+      const classified = await classifyRepository(
+        cwd,
+        context.log,
+        repoLabel,
+        context.octokit,
+        repository.owner,
+      );
       await commitBadge(cwd, classified, token, cloneUrl);
       return selectPatchableFindings(classified);
     },
@@ -218,9 +252,6 @@ export async function handlePullRequest(context: WorkflowContext): Promise<void>
   const repoLabel = `${repository.owner}/${repository.repo}`;
   const pr = context.payload.pull_request;
 
-  // Non-negotiable #6: a PR touching .security-policy.json must always go to
-  // human review, regardless of what the new policy says. Check this BEFORE
-  // checking out the repo or running any audit logic.
   const { data: changedFiles } = await context.octokit.rest.pulls.listFiles({
     owner: repository.owner,
     repo: repository.repo,
@@ -228,7 +259,9 @@ export async function handlePullRequest(context: WorkflowContext): Promise<void>
     per_page: 300,
   });
 
-  if (changedFiles.some((f) => f.filename === ".security-policy.json")) {
+  const touchesPolicy = changedFiles.some((f) => f.filename === ".security-policy.json");
+
+  if (touchesPolicy) {
     context.log.warn(
       { repository: repoLabel, pullRequestNumber: String(pr.number) },
       "PR touches .security-policy.json — routing to mandatory human review",
@@ -255,7 +288,13 @@ export async function handlePullRequest(context: WorkflowContext): Promise<void>
   const reviewFindings = await withRepoCheckout(
     { cloneUrl, token, ref },
     async (cwd) => {
-      const classified = await classifyRepository(cwd, context.log, repoLabel);
+      const classified = await classifyRepository(
+        cwd,
+        context.log,
+        repoLabel,
+        context.octokit,
+        repository.owner,
+      );
       const review = selectReviewFindings(classified);
       await persistRiskLog(cwd, review);
       await commitBadge(cwd, classified, token, cloneUrl);
