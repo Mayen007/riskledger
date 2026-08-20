@@ -1,6 +1,7 @@
 import { schedule } from "node-cron";
 import type { Probot } from "probot";
 import { postWeeklyDigest } from "../actions/postWeeklyDigest";
+import { postOrgSummary, type RepoReport } from "../actions/postOrgSummary";
 import type { DigestStats } from "../shared/computeDigestStats";
 
 /**
@@ -78,6 +79,9 @@ async function readRepoStats(
 /**
  * Runs the weekly digest for every installation and repository that has a
  * `.riskledger/stats.json` (i.e., has been audited at least once).
+ *
+ * If an installation has 2 or more monitored repositories, posts an aggregated
+ * cross-repo organization security summary to the org's central `.github` repo.
  */
 export async function runDigestForAllInstallations(app: Probot): Promise<void> {
   const appOctokit = (await app.auth()) as unknown as DigestOctokit;
@@ -92,9 +96,18 @@ export async function runDigestForAllInstallations(app: Probot): Promise<void> {
       { per_page: 100 },
     );
 
+    const auditedReports: RepoReport[] = [];
+    let orgOwner: string | undefined;
+
     for (const repo of repos) {
+      orgOwner = repo.owner.login;
       const stats = await readRepoStats(installOctokit, repo.owner.login, repo.name);
       if (!stats) continue; // Skip repos not yet audited by RiskLedger.
+
+      auditedReports.push({
+        repository: `${repo.owner.login}/${repo.name}`,
+        stats,
+      });
 
       try {
         await postWeeklyDigest(
@@ -107,6 +120,17 @@ export async function runDigestForAllInstallations(app: Probot): Promise<void> {
         app.log.error(
           { repository: `${repo.owner.login}/${repo.name}`, err: String(err) },
           "Failed to post weekly digest for repository",
+        );
+      }
+    }
+
+    if (auditedReports.length >= 2 && orgOwner) {
+      try {
+        await postOrgSummary(installOctokit.rest.issues, orgOwner, auditedReports);
+      } catch (err) {
+        app.log.warn(
+          { org: orgOwner, err: String(err) },
+          "Failed to post organization cross-repo security summary",
         );
       }
     }
