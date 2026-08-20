@@ -63,3 +63,74 @@ describe("loadPolicy", () => {
     await expect(loadPolicy(tmpDir)).rejects.toThrow("reason");
   });
 });
+
+describe("parsePolicy", () => {
+  it("parses valid raw policy object correctly", () => {
+    const raw = {
+      autoPatch: { minSeverity: "moderate", maxSeverity: "critical" },
+      autoMergePatchLevel: true,
+      acceptedRisks: [{ cve: "CVE-2024-1111", reason: "Internal only", decidedBy: "carol" }],
+    };
+    const parsed = require("../src/classify/loadPolicy").parsePolicy(raw);
+    expect(parsed.autoPatch.minSeverity).toBe("moderate");
+    expect(parsed.autoPatch.maxSeverity).toBe("critical");
+    expect(parsed.autoMergePatchLevel).toBe(true);
+    expect(parsed.acceptedRisks).toHaveLength(1);
+  });
+
+  it("throws when required fields are missing", () => {
+    expect(() => require("../src/classify/loadPolicy").parsePolicy({})).toThrow("autoPatch");
+  });
+});
+
+describe("mergePolicies", () => {
+  const { mergePolicies } = require("../src/classify/loadPolicy");
+
+  it("returns base policy unchanged when override is undefined or null", () => {
+    const base = {
+      autoPatch: { minSeverity: "low" as const, maxSeverity: "moderate" as const },
+      autoMergePatchLevel: false,
+      acceptedRisks: [{ cve: "CVE-1", reason: "r1", decidedBy: "u1" }],
+    };
+    expect(mergePolicies(base)).toEqual(base);
+    expect(mergePolicies(base, null)).toEqual(base);
+  });
+
+  it("overrides autoPatch and autoMergePatchLevel when specified", () => {
+    const base = {
+      autoPatch: { minSeverity: "low" as const, maxSeverity: "moderate" as const },
+      autoMergePatchLevel: false,
+      acceptedRisks: [],
+    };
+    const override = {
+      autoPatch: { minSeverity: "moderate" as const, maxSeverity: "critical" as const },
+      autoMergePatchLevel: true,
+    };
+    const merged = mergePolicies(base, override);
+    expect(merged.autoPatch).toEqual({ minSeverity: "moderate", maxSeverity: "critical" });
+    expect(merged.autoMergePatchLevel).toBe(true);
+  });
+
+  it("merges acceptedRisks and lets override take precedence on duplicate CVEs", () => {
+    const base = {
+      autoPatch: { minSeverity: "low" as const, maxSeverity: "moderate" as const },
+      autoMergePatchLevel: false,
+      acceptedRisks: [
+        { cve: "CVE-ORG-1", reason: "Org reason", decidedBy: "org-admin" },
+        { cve: "CVE-COMMON", reason: "Org common reason", decidedBy: "org-admin" },
+      ],
+    };
+    const override = {
+      acceptedRisks: [
+        { cve: "CVE-COMMON", reason: "Repo custom reason", decidedBy: "repo-lead" },
+        { cve: "CVE-REPO-1", reason: "Repo reason", decidedBy: "repo-lead" },
+      ],
+    };
+
+    const merged = mergePolicies(base, override);
+    expect(merged.acceptedRisks).toHaveLength(3);
+    const commonEntry = merged.acceptedRisks?.find((r: { cve: string }) => r.cve === "CVE-COMMON");
+    expect(commonEntry?.reason).toBe("Repo custom reason");
+    expect(commonEntry?.decidedBy).toBe("repo-lead");
+  });
+});

@@ -56,7 +56,7 @@ function parseAcceptedRisks(raw: unknown, path: string): AcceptedRiskEntry[] {
   });
 }
 
-function parsePolicy(raw: unknown): ClassificationPolicy {
+export function parsePolicy(raw: unknown): ClassificationPolicy {
   assertField(typeof raw === "object" && raw !== null, "root", "an object");
 
   const obj = raw as Record<string, unknown>;
@@ -80,6 +80,46 @@ function parsePolicy(raw: unknown): ClassificationPolicy {
     },
     autoMergePatchLevel,
     acceptedRisks,
+  };
+}
+
+/**
+ * Merges a repository-specific policy override onto a base (e.g. organization-level) policy.
+ *
+ * - `autoPatch.minSeverity` / `maxSeverity` in override supersede base values.
+ * - `autoMergePatchLevel` in override supersedes base if defined.
+ * - `acceptedRisks` from both are merged, deduplicating by CVE ID (override takes precedence).
+ */
+export function mergePolicies(
+  base: ClassificationPolicy,
+  override?: Partial<ClassificationPolicy> | null,
+): ClassificationPolicy {
+  if (!override) {
+    return base;
+  }
+
+  const mergedAutoPatch = {
+    minSeverity: override.autoPatch?.minSeverity ?? base.autoPatch.minSeverity,
+    maxSeverity: override.autoPatch?.maxSeverity ?? base.autoPatch.maxSeverity,
+  };
+
+  const mergedAutoMerge =
+    override.autoMergePatchLevel !== undefined
+      ? override.autoMergePatchLevel
+      : base.autoMergePatchLevel;
+
+  const riskMap = new Map<string, AcceptedRiskEntry>();
+  for (const entry of base.acceptedRisks ?? []) {
+    riskMap.set(entry.cve, entry);
+  }
+  for (const entry of override.acceptedRisks ?? []) {
+    riskMap.set(entry.cve, entry);
+  }
+
+  return {
+    autoPatch: mergedAutoPatch,
+    autoMergePatchLevel: mergedAutoMerge,
+    acceptedRisks: Array.from(riskMap.values()),
   };
 }
 
