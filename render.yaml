@@ -5,7 +5,7 @@ services:
     region: oregon  # change to: frankfurt, singapore, ohio, or virginia if preferred
     plan: free      # upgrade to "starter" ($7/mo) for always-on (no cold starts)
 
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start
 
     healthCheckPath: /
