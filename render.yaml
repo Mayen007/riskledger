@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: riskledger
+    runtime: node
+    region: oregon  # change to: frankfurt, singapore, ohio, or virginia if preferred
+    plan: free      # upgrade to "starter" ($7/mo) for always-on (no cold starts)
+
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+
+    healthCheckPath: /
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      # --- Secrets — set these manually in the Render dashboard, NOT here ---
+      # APP_ID            GitHub App ID (numeric)
+      # PRIVATE_KEY       Full PEM content of the private key (multi-line ok)
+      # WEBHOOK_SECRET    Webhook secret from GitHub App settings

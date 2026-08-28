@@ -1,4 +1,8 @@
-import "dotenv/config";
+// Load .env in development. In production (Render / other PaaS) env vars are
+// pre-injected by the host; dotenv.config() is a safe no-op if the vars are
+// already set — it never overwrites existing environment variables.
+import { config as loadEnv } from "dotenv";
+loadEnv();
 
 import { run } from "probot";
 
@@ -23,4 +27,4 @@ process.on("unhandledRejection", (reason) => {
   throw reason;
 });
 
-run(registerApp);
+run(registerApp);
