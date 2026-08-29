@@ -1,18 +1,11 @@
-import type { Probot } from "probot";
+import type { ApplicationFunctionOptions, Probot } from "probot";
 
 import { handleIssueComment } from "./commands/handleIssueComment";
 import { CheckoutError, handlePullRequest, handlePush } from "./commands/runAuditWorkflow";
 import { scheduleWeeklyDigest } from "./commands/scheduleWeeklyDigest";
 import { getRateLimitDetails } from "./shared/rateLimit";
 
-/** Narrow interface for the parts of Probot's Express app we actually use. */
-interface ProbotWithRoutes {
-  expressApp: {
-    get(path: string, handler: (req: unknown, res: { json(body: unknown): void }) => void): void;
-  };
-}
-
-export default function registerApp(app: Probot): void {
+export default function registerApp(app: Probot, { addHandler }: ApplicationFunctionOptions): void {
   app.on("push", async (context) => {
     const repository = context.payload.repository.full_name;
     const ref = context.payload.ref;
@@ -118,12 +111,15 @@ export default function registerApp(app: Probot): void {
     }
   });
 
-  // Health / status endpoint — lets Render's HTTP health check and humans
-  // visiting the root URL get a 200 rather than a 404.
-  // expressApp is not in Probot's public TS types, so we use a narrow interface
-  // rather than casting to any (per AGENTS.md conventions).
-  (app as unknown as ProbotWithRoutes).expressApp.get("/", (_req, res) => {
-    res.json({ status: "ok", app: "RiskLedger", version: "0.1.0" });
+  // Health / status endpoint — registered via Probot's addHandler API so it
+  // sits after the webhook middleware in the handler chain. Returning true
+  // signals that this handler consumed the request (stops the chain).
+  addHandler((req, res) => {
+    if (req.method === "GET" && req.url === "/") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", app: "RiskLedger", version: "0.1.0" }));
+      return true;
+    }
   });
 
   // Schedule the weekly security digest. Runs once at server start-up using

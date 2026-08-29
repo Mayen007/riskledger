@@ -21,18 +21,18 @@ describe("push handler", () => {
   afterEach(() => jest.clearAllMocks());
 
   it("registers a push handler", () => {
+    const addHandler = jest.fn();
     const app = {
       on: jest.fn(),
       log: { info: jest.fn() },
-      expressApp: { get: jest.fn() },
-    } as { on: jest.Mock; log: { info: jest.Mock }; expressApp: { get: jest.Mock } };
+    } as { on: jest.Mock; log: { info: jest.Mock } };
 
-    registerApp(app as never);
+    registerApp(app as never, { addHandler, cwd: process.cwd() });
 
     expect(app.on).toHaveBeenCalledWith("push", expect.any(Function));
     expect(app.on).toHaveBeenCalledWith("pull_request.opened", expect.any(Function));
     expect(app.on).toHaveBeenCalledWith("issue_comment.created", expect.any(Function));
-    expect(app.expressApp.get).toHaveBeenCalledWith("/", expect.any(Function));
+    expect(addHandler).toHaveBeenCalledWith(expect.any(Function));
   });
 
   it("skips handlePush when head_commit message starts with chore(riskledger):", async () => {
@@ -42,10 +42,9 @@ describe("push handler", () => {
         handlers[event] = handler;
       }),
       log: { info: jest.fn(), warn: jest.fn() },
-      expressApp: { get: jest.fn() },
     };
 
-    registerApp(app as never);
+    registerApp(app as never, { addHandler: jest.fn(), cwd: process.cwd() });
 
     const fakeContext = {
       payload: {
