@@ -5,6 +5,13 @@ import { CheckoutError, handlePullRequest, handlePush } from "./commands/runAudi
 import { scheduleWeeklyDigest } from "./commands/scheduleWeeklyDigest";
 import { getRateLimitDetails } from "./shared/rateLimit";
 
+/** Narrow interface for the parts of Probot's Express app we actually use. */
+interface ProbotWithRoutes {
+  expressApp: {
+    get(path: string, handler: (req: unknown, res: { json(body: unknown): void }) => void): void;
+  };
+}
+
 export default function registerApp(app: Probot): void {
   app.on("push", async (context) => {
     const repository = context.payload.repository.full_name;
@@ -109,6 +116,14 @@ export default function registerApp(app: Probot): void {
 
       throw error;
     }
+  });
+
+  // Health / status endpoint — lets Render's HTTP health check and humans
+  // visiting the root URL get a 200 rather than a 404.
+  // expressApp is not in Probot's public TS types, so we use a narrow interface
+  // rather than casting to any (per AGENTS.md conventions).
+  (app as unknown as ProbotWithRoutes).expressApp.get("/", (_req, res) => {
+    res.json({ status: "ok", app: "RiskLedger", version: "0.1.0" });
   });
 
   // Schedule the weekly security digest. Runs once at server start-up using
