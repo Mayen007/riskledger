@@ -5,6 +5,7 @@ import { dedup } from "../classify/dedup";
 import { appendToRiskLog } from "../actions/appendToRiskLog";
 import {
   openPatchPR,
+  groupPatchableFindings,
   type PullRequestLabelWriter,
   type PullRequestWriter,
   type RepositoryRef,
@@ -227,7 +228,7 @@ export async function handlePush(context: WorkflowContext): Promise<void> {
   const ref = context.payload.ref.replace(/^refs\/heads\//, "");
   const cloneUrl = context.payload.repository.clone_url;
 
-  const patchableFindings = await withRepoCheckout(
+  const patchBatches = await withRepoCheckout(
     { cloneUrl, token, ref },
     async (cwd) => {
       const classified = await classifyRepository(
@@ -237,7 +238,6 @@ export async function handlePush(context: WorkflowContext): Promise<void> {
         context.octokit,
         repository.owner,
       );
-      const manifests = await findManifestDirectories(cwd);
       await persistRiskLog(cwd, classified);
       await commitBadge(cwd, classified, token, cloneUrl);
       const patchable = selectPatchableFindings(classified);
@@ -245,35 +245,55 @@ export async function handlePush(context: WorkflowContext): Promise<void> {
         return [];
       }
 
-      const patchCreated = await createPatchBranch(cwd, cloneUrl, token, manifests, patchable);
-      if (!patchCreated) {
-        return [];
-      }
-
-      const verified = await classifyRepository(
-        cwd,
-        context.log,
-        repoLabel,
-        context.octokit,
-        repository.owner,
-      );
-      const unresolved = new Set(
-        verified.map((finding) => String(finding.finding.advisoryId)),
-      );
-      if (patchable.some((finding) => unresolved.has(String(finding.finding.advisoryId)))) {
-        throw new Error("Dependency patch branch did not resolve every patchable advisory");
-      }
-
-      return patchable;
+      return groupPatchableFindings(patchable);
     },
   );
 
-  if (patchableFindings.length === 0) {
+  if (patchBatches.length === 0) {
     context.log.info({ repository: repoLabel }, "No patchable findings");
     return;
   }
 
-  await openPatchPR(context.octokit.rest.pulls, repository, patchableFindings, context.octokit.rest.issues);
+  for (const batch of patchBatches) {
+    const patchCreated = await withRepoCheckout(
+      { cloneUrl, token, ref },
+      async (cwd) => {
+        const manifests = await findManifestDirectories(cwd);
+        const created = await createPatchBranch(cwd, cloneUrl, token, manifests, batch.findings, batch.branch);
+        if (!created) {
+          return false;
+        }
+
+        const verified = await classifyRepository(
+          cwd,
+          context.log,
+          repoLabel,
+          context.octokit,
+          repository.owner,
+        );
+        const unresolved = new Set(
+          verified.map((finding) => String(finding.finding.advisoryId)),
+        );
+        if (batch.findings.some((finding) => unresolved.has(String(finding.finding.advisoryId)))) {
+          throw new Error("Dependency patch branch did not resolve every patchable advisory");
+        }
+
+        return true;
+      },
+    );
+
+    if (!patchCreated) {
+      continue;
+    }
+
+    await openPatchPR(
+      context.octokit.rest.pulls,
+      repository,
+      batch.findings,
+      context.octokit.rest.issues,
+      batch.branch,
+    );
+  }
 }
 
 export async function handlePullRequest(context: WorkflowContext): Promise<void> {

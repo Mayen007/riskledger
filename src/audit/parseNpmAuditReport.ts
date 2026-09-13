@@ -16,7 +16,7 @@ interface NpmAuditAdvisory {
   title?: string;
   vulnerable_versions?: string;
   patched_versions?: string;
-  fix_available?: boolean | string;
+  fix_available?: boolean | string | { name?: string; version?: string; isSemVerMajor?: boolean };
   /** npm audit v2: list of root advisories this vulnerability comes from. */
   via?: Array<NpmAuditViaEntry | string>;
 }
@@ -85,6 +85,13 @@ export function parseNpmAuditReport(output: string): AuditFinding[] {
     const patchedVersions = advisory.patched_versions ? [advisory.patched_versions] : undefined;
     const advisoryId = extractAdvisoryId(advisory.via, index + 1);
     const advisoryUrl = extractAdvisoryUrl(advisory.via);
+    const fixInfo = typeof advisory.fix_available === "object" && advisory.fix_available !== null &&
+      typeof advisory.fix_available.name === "string" && typeof advisory.fix_available.version === "string"
+      ? [{ name: advisory.fix_available.name, version: advisory.fix_available.version }]
+      : undefined;
+    const upgradeType = typeof advisory.fix_available === "object" && advisory.fix_available?.isSemVerMajor
+      ? "major" as const
+      : "compatible" as const;
 
     return {
       ecosystem: "npm",
@@ -93,7 +100,12 @@ export function parseNpmAuditReport(output: string): AuditFinding[] {
       advisoryId,
       title: advisory.title ?? packageName,
       vulnerableVersions: advisory.vulnerable_versions ?? "*",
-      fixAvailable: advisory.fix_available === true || advisory.fix_available === "true",
+      fixAvailable:
+        advisory.fix_available === true ||
+        advisory.fix_available === "true" ||
+        (typeof advisory.fix_available === "object" && advisory.fix_available !== null),
+      ...(fixInfo ? { fixInfo } : {}),
+      ...(typeof advisory.fix_available === "object" && advisory.fix_available !== null ? { upgradeType } : {}),
       patchedVersions,
       ...(advisoryUrl ? { advisoryUrl } : {}),
     } satisfies AuditFinding;

@@ -1,4 +1,4 @@
-import { openPatchPR } from "../src/actions/openPatchPR";
+import { groupPatchableFindings, openPatchPR } from "../src/actions/openPatchPR";
 
 describe("openPatchPR", () => {
   const finding = {
@@ -41,5 +41,29 @@ describe("openPatchPR", () => {
       }),
     );
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("groups compatible fixes and isolates major upgrades", () => {
+    const major = {
+      ...finding,
+      finding: {
+        ...finding.finding,
+        packageName: "framework",
+        upgradeType: "major" as const,
+      },
+    };
+
+    expect(groupPatchableFindings([finding, major])).toEqual([
+      expect.objectContaining({
+        branch: "riskledger/patches",
+        upgradeType: "compatible",
+        findings: [finding],
+      }),
+      expect.objectContaining({
+        branch: "riskledger/patches-major-framework",
+        upgradeType: "major",
+        findings: [major],
+      }),
+    ]);
   });
 });

@@ -22,9 +22,13 @@ jest.mock("../src/classify/dedup", () => ({
   dedup: jest.fn((findings: unknown[]) => findings),
 }));
 
-jest.mock("../src/actions/openPatchPR", () => ({
-  openPatchPR: jest.fn(),
-}));
+jest.mock("../src/actions/openPatchPR", () => {
+  const actual = jest.requireActual("../src/actions/openPatchPR");
+  return {
+    ...actual,
+    openPatchPR: jest.fn(),
+  };
+});
 
 jest.mock("../src/actions/postRiskComment", () => ({
   postRiskComment: jest.fn(),
@@ -195,7 +199,7 @@ describe("runAuditWorkflow", () => {
     expect(mockedOpenPatchPR).toHaveBeenCalledWith(context.octokit.rest.pulls, {
       owner: "owner",
       repo: "repo",
-    }, expect.any(Array), context.octokit.rest.issues);
+    }, expect.any(Array), context.octokit.rest.issues, "riskledger/patches");
     expect(mockedPostRiskComment).not.toHaveBeenCalled();
   });
 

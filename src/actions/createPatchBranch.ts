@@ -71,6 +71,49 @@ async function updateRequirementsFile(path: string, patchable: ClassifiedFinding
   await writeFile(path, content, "utf8");
 }
 
+async function applyMajorNpmFix(
+  manifests: PatchManifestDirectories,
+  patchable: ClassifiedFinding[],
+): Promise<void> {
+  for (const classified of patchable) {
+    const fix = classified.finding.fixInfo?.[0];
+    if (!fix) {
+      throw new PatchBranchError(
+        `Cannot isolate a major npm update for ${classified.finding.packageName}: target version is missing`,
+      );
+    }
+
+    let applied = false;
+    for (const directory of manifests.npm) {
+      const packagePath = join(directory, "package.json");
+      if (!existsSync(packagePath)) {
+        continue;
+      }
+
+      const packageJson = JSON.parse(await readFile(packagePath, "utf8")) as Record<string, unknown>;
+      const dependencySections = ["dependencies", "devDependencies", "optionalDependencies"];
+      const containsPackage = dependencySections.some((section) => {
+        const values = packageJson[section];
+        return typeof values === "object" && values !== null && classified.finding.packageName in values;
+      });
+      if (!containsPackage) {
+        continue;
+      }
+
+      await runCommand(directory, {
+        command: getNpmCommand(),
+        args: ["install", `${fix.name}@${fix.version}`, "--save"],
+      });
+      applied = true;
+      break;
+    }
+
+    if (!applied) {
+      throw new PatchBranchError(`Could not locate ${classified.finding.packageName} in a package manifest`);
+    }
+  }
+}
+
 /**
  * Applies ecosystem-native fixes in a temporary checkout, verifies that the
  * requested advisories are gone, and pushes the resulting branch.
@@ -81,6 +124,7 @@ export async function createPatchBranch(
   token: string,
   manifests: PatchManifestDirectories,
   patchable: ClassifiedFinding[],
+  branch = PATCH_BRANCH,
 ): Promise<boolean> {
   const git = simpleGit({ baseDir: cwd, unsafe: { allowUnsafeConfigPaths: true } }).env({
     GIT_TERMINAL_PROMPT: "0",
@@ -90,16 +134,20 @@ export async function createPatchBranch(
   });
 
   try {
-    const remoteBranch = await git.listRemote(["--heads", "origin", PATCH_BRANCH]);
+    const remoteBranch = await git.listRemote(["--heads", "origin", branch]);
     if (remoteBranch.trim().length > 0) {
-      await git.fetch("origin", PATCH_BRANCH);
-      await git.checkoutBranch(PATCH_BRANCH, `origin/${PATCH_BRANCH}`);
+      await git.fetch("origin", branch);
+      await git.checkoutBranch(branch, `origin/${branch}`);
     } else {
-      await git.checkoutLocalBranch(PATCH_BRANCH);
+      await git.checkoutLocalBranch(branch);
     }
 
-    for (const directory of manifests.npm) {
-      await runCommand(directory, { command: getNpmCommand(), args: ["audit", "fix"] });
+    if (branch.includes("-major-")) {
+      await applyMajorNpmFix(manifests, patchable);
+    } else {
+      for (const directory of manifests.npm) {
+        await runCommand(directory, { command: getNpmCommand(), args: ["audit", "fix"] });
+      }
     }
 
     for (const directory of manifests.pip) {
@@ -131,7 +179,7 @@ export async function createPatchBranch(
     await git.addConfig("user.name", "riskledger[bot]");
     await git.addConfig("user.email", "riskledger[bot]@users.noreply.github.com");
     await git.commit("chore(riskledger): patch dependency vulnerabilities");
-    await git.raw(["-c", "credential.helper=", "push", authenticatedUrl(cloneUrl, token), PATCH_BRANCH]);
+    await git.raw(["-c", "credential.helper=", "push", authenticatedUrl(cloneUrl, token), branch]);
     return true;
   } catch (error) {
     if (error instanceof PatchBranchError) {

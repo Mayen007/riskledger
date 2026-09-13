@@ -5,6 +5,8 @@ export interface AuditFixInfo {
   version: string;
 }
 
+export type UpgradeType = "compatible" | "major";
+
 export interface AuditFinding {
   ecosystem: "npm" | "pip";
   packageName: string;
@@ -13,6 +15,7 @@ export interface AuditFinding {
   severity: AuditSeverity;
   advisoryId: number | string;
   advisoryUrl?: string;
+  upgradeType?: UpgradeType;
   title: string;
   vulnerableVersions: string;
   fixAvailable: boolean;

@@ -1,4 +1,4 @@
-import type { ClassifiedFinding } from "../shared/types";
+import type { ClassifiedFinding, UpgradeType } from "../shared/types";
 
 export interface PullRequestLabelWriter {
   addLabels?: (input: {
@@ -39,11 +39,39 @@ export interface RepositoryRef {
   repo: string;
 }
 
+export interface PatchBatch {
+  branch: string;
+  upgradeType: UpgradeType;
+  findings: ClassifiedFinding[];
+}
+
+export function groupPatchableFindings(findings: ClassifiedFinding[]): PatchBatch[] {
+  const compatible = findings.filter((finding) => finding.finding.upgradeType !== "major");
+  const major = findings.filter((finding) => finding.finding.upgradeType === "major");
+  const batches: PatchBatch[] = [];
+
+  if (compatible.length > 0) {
+    batches.push({ branch: "riskledger/patches", upgradeType: "compatible", findings: compatible });
+  }
+
+  for (const finding of major) {
+    const packageSlug = finding.finding.packageName.replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase();
+    batches.push({
+      branch: `riskledger/patches-major-${packageSlug}`,
+      upgradeType: "major",
+      findings: [finding],
+    });
+  }
+
+  return batches;
+}
+
 export async function openPatchPR(
   client: PullRequestWriter,
   repository: RepositoryRef,
   findings: ClassifiedFinding[],
   labelsClient?: PullRequestLabelWriter,
+  branch = "riskledger/patches",
 ): Promise<unknown> {
   const titles = findings.map((finding) => `${finding.finding.packageName} (${finding.finding.severity})`);
   const advisories = findings.map((finding) => {
@@ -63,7 +91,7 @@ export async function openPatchPR(
       "",
       `Dependency files updated by ecosystem fixers: ${findings.map((finding) => finding.finding.packageName).join(", ")}`,
     ].join("\n"),
-    head: "riskledger/patches",
+    head: branch,
     base: "main",
   };
 
@@ -72,7 +100,7 @@ export async function openPatchPR(
       owner: repository.owner,
       repo: repository.repo,
       state: "open",
-      head: `${repository.owner}:riskledger/patches`,
+      head: `${repository.owner}:${branch}`,
       base: "main",
     });
 
