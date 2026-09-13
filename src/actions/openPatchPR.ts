@@ -46,7 +46,10 @@ export async function openPatchPR(
   labelsClient?: PullRequestLabelWriter,
 ): Promise<unknown> {
   const titles = findings.map((finding) => `${finding.finding.packageName} (${finding.finding.severity})`);
-  const advisories = findings.map((finding) => `${finding.finding.advisoryId}: ${finding.finding.title}`);
+  const advisories = findings.map((finding) => {
+    const label = `${finding.finding.advisoryId}: ${finding.finding.title}`;
+    return finding.finding.advisoryUrl ? `[${label}](${finding.finding.advisoryUrl})` : label;
+  });
   const input = {
     owner: repository.owner,
     repo: repository.repo,
@@ -58,7 +61,7 @@ export async function openPatchPR(
       "Advisories:",
       ...advisories.map((advisory) => `- ${advisory}`),
       "",
-      `Dependency files updated: ${findings.map((finding) => finding.finding.packageName).join(", ")}`,
+      `Dependency files updated by ecosystem fixers: ${findings.map((finding) => finding.finding.packageName).join(", ")}`,
     ].join("\n"),
     head: "riskledger/patches",
     base: "main",

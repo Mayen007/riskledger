@@ -12,6 +12,7 @@ export interface AuditFinding {
   affectedPackages?: string[];
   severity: AuditSeverity;
   advisoryId: number | string;
+  advisoryUrl?: string;
   title: string;
   vulnerableVersions: string;
   fixAvailable: boolean;

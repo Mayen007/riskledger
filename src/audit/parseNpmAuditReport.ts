@@ -72,6 +72,10 @@ function extractAdvisoryId(via: Array<NpmAuditViaEntry | string> | undefined, fa
   return fallback;
 }
 
+function extractAdvisoryUrl(via: Array<NpmAuditViaEntry | string> | undefined): string | undefined {
+  return via?.find((entry): entry is NpmAuditViaEntry => typeof entry === "object" && typeof entry.url === "string")?.url;
+}
+
 export function parseNpmAuditReport(output: string): AuditFinding[] {
   const report = JSON.parse(output) as NpmAuditReport;
   const vulnerabilities = report.vulnerabilities ?? {};
@@ -80,6 +84,7 @@ export function parseNpmAuditReport(output: string): AuditFinding[] {
     const severity = toSeverity(advisory.severity ?? report.metadata?.vulnerabilities?.[packageName]?.severity);
     const patchedVersions = advisory.patched_versions ? [advisory.patched_versions] : undefined;
     const advisoryId = extractAdvisoryId(advisory.via, index + 1);
+    const advisoryUrl = extractAdvisoryUrl(advisory.via);
 
     return {
       ecosystem: "npm",
@@ -90,6 +95,7 @@ export function parseNpmAuditReport(output: string): AuditFinding[] {
       vulnerableVersions: advisory.vulnerable_versions ?? "*",
       fixAvailable: advisory.fix_available === true || advisory.fix_available === "true",
       patchedVersions,
+      ...(advisoryUrl ? { advisoryUrl } : {}),
     } satisfies AuditFinding;
   });
-}
+}
