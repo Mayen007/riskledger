@@ -79,6 +79,12 @@ export default function registerApp(app: Probot, { addHandler }: ApplicationFunc
   });
 
   app.on("issue_comment.created", async (context) => {
+    const comment = context.payload.comment;
+    const body = typeof comment.body === "string" ? comment.body.trim() : "";
+    if (!comment.user || comment.user.type === "Bot" || !/^(\/recheck|\/accept)(?:\s|$)/.test(body)) {
+      return;
+    }
+
     const repository = context.payload.repository.full_name;
 
     app.log.info(

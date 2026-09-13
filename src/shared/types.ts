@@ -51,4 +51,5 @@ export interface ClassifiedFinding {
   finding: AuditFinding;
   decision: ClassificationDecision;
   reason: string;
+  acceptedRisk?: AcceptedRiskEntry;
 }

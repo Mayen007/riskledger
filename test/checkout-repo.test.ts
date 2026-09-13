@@ -68,9 +68,8 @@ describe("withRepoCheckout", () => {
 
     expect(calledUrl).toContain(`x-access-token:${TOKEN}@`);
     expect(calledUrl).toContain("github.com/Mayen007/reviwa.git");
-    // Credential helper suppression is done via env vars (GIT_CONFIG_NOSYSTEM /
-    // GIT_CONFIG_GLOBAL), not -c flags — clone args are shallow-clone only.
-    expect(calledArgs).not.toContain("-c");
+    expect(calledArgs).toContain("-c");
+    expect(calledArgs).toContain("credential.helper=");
     expect(calledArgs).toContain("--depth");
     expect(calledArgs).toContain("1");
     expect(calledArgs).toContain("--branch");

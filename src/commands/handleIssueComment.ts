@@ -49,11 +49,11 @@ export interface IssueCommentCreatedContext {
 function getIssueCommentCommand(body: string): "/recheck" | "/accept" | null {
   const trimmedBody = body.trim();
 
-  if (trimmedBody.startsWith("/recheck")) {
+  if (/^\/recheck(?:\s|$)/.test(trimmedBody)) {
     return "/recheck";
   }
 
-  if (trimmedBody.startsWith("/accept")) {
+  if (/^\/accept(?:\s|$)/.test(trimmedBody)) {
     return "/accept";
   }
 

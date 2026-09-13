@@ -4,6 +4,10 @@ import { postRiskComment } from "../src/actions/postRiskComment";
 import { openPatchPR } from "../src/actions/openPatchPR";
 import { runAuditNpm } from "../src/audit/runAuditNpm";
 
+jest.mock("../src/actions/createPatchBranch", () => ({
+  createPatchBranch: jest.fn(),
+}));
+
 jest.mock("../src/audit/runAuditNpm", () => ({
   runAuditNpm: jest.fn(),
 }));

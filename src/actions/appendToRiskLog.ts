@@ -1,11 +1,15 @@
-import type { ClassifiedFinding } from "../shared/types";
+import type { AcceptedRiskEntry } from "../shared/types";
 
-export function appendToRiskLog(existingLog: string, finding: ClassifiedFinding): string {
+export function appendToRiskLog(existingLog: string, risk: AcceptedRiskEntry): string {
+  if (!risk.cve || !risk.reason || !risk.decidedBy) {
+    throw new Error("Accepted-risk log entries require cve, reason, and decidedBy");
+  }
+
   const entry = [
-    `- ${finding.finding.packageName}`,
-    `  - severity: ${finding.finding.severity}`,
-    `  - decision: ${finding.decision}`,
-    `  - reason: ${finding.reason}`,
+    `- advisory: ${risk.cve}`,
+    "  - decision: accepted-risk",
+    `  - reason: ${risk.reason}`,
+    `  - decidedBy: ${risk.decidedBy}`,
   ].join("\n");
 
   if (existingLog.trim().length === 0) {

@@ -3,7 +3,13 @@ import { classify } from "../classify/classify";
 import { loadPolicy, mergePolicies } from "../classify/loadPolicy";
 import { dedup } from "../classify/dedup";
 import { appendToRiskLog } from "../actions/appendToRiskLog";
-import { openPatchPR, type PullRequestWriter, type RepositoryRef } from "../actions/openPatchPR";
+import {
+  openPatchPR,
+  type PullRequestLabelWriter,
+  type PullRequestWriter,
+  type RepositoryRef,
+} from "../actions/openPatchPR";
+import { createPatchBranch } from "../actions/createPatchBranch";
 import { postRiskComment, type IssueCommentWriter } from "../actions/postRiskComment";
 import { writeStatusBadge } from "../actions/writeStatusBadge";
 import { computeDigestStats } from "../shared/computeDigestStats";
@@ -50,7 +56,7 @@ export interface WorkflowContext {
   octokit: {
     rest: {
       pulls: PullRequestWriter & PullRequestFilesReader;
-      issues: IssueCommentWriter;
+      issues: IssueCommentWriter & PullRequestLabelWriter;
       repos?: OrgPolicyClient;
     };
     auth: (options: { type: string }) => Promise<{ token: string }>;
@@ -78,13 +84,14 @@ function selectReviewFindings(findings: ClassifiedFinding[]): ClassifiedFinding[
 }
 
 async function persistRiskLog(cwd: string, findings: ClassifiedFinding[]): Promise<void> {
-  if (findings.length === 0) {
+  const acceptedRisks = findings.flatMap((finding) => finding.acceptedRisk ? [finding.acceptedRisk] : []);
+  if (acceptedRisks.length === 0) {
     return;
   }
 
   const riskLogPath = resolve(cwd, "accepted-risks.md");
   const existingLog = existsSync(riskLogPath) ? await readFile(riskLogPath, "utf8") : "";
-  const updatedLog = findings.reduce((log, finding) => appendToRiskLog(log, finding), existingLog);
+  const updatedLog = acceptedRisks.reduce((log, risk) => appendToRiskLog(log, risk), existingLog);
 
   await writeFile(riskLogPath, updatedLog, "utf8");
 }
@@ -126,7 +133,7 @@ async function commitBadge(
     }
   }
 
-  await git.add(".riskledger/");
+  await git.add([".riskledger/", "accepted-risks.md"]);
 
   const status = await git.status();
   if (status.staged.length === 0) {
@@ -134,8 +141,8 @@ async function commitBadge(
     return;
   }
 
-  await git.commit("chore(riskledger): update security badge");
-  await git.push(authenticatedUrl, "HEAD");
+  await git.commit("chore(riskledger): update security records");
+  await git.raw(["-c", "credential.helper=", "push", authenticatedUrl, "HEAD"]);
 }
 
 const AUDIT_BATCH_CONCURRENCY = 3;
@@ -230,8 +237,34 @@ export async function handlePush(context: WorkflowContext): Promise<void> {
         context.octokit,
         repository.owner,
       );
+      const manifests = await findManifestDirectories(cwd);
+      await persistRiskLog(cwd, classified);
       await commitBadge(cwd, classified, token, cloneUrl);
-      return selectPatchableFindings(classified);
+      const patchable = selectPatchableFindings(classified);
+      if (patchable.length === 0) {
+        return [];
+      }
+
+      const patchCreated = await createPatchBranch(cwd, cloneUrl, token, manifests, patchable);
+      if (!patchCreated) {
+        return [];
+      }
+
+      const verified = await classifyRepository(
+        cwd,
+        context.log,
+        repoLabel,
+        context.octokit,
+        repository.owner,
+      );
+      const unresolved = new Set(
+        verified.map((finding) => String(finding.finding.advisoryId)),
+      );
+      if (patchable.some((finding) => unresolved.has(String(finding.finding.advisoryId)))) {
+        throw new Error("Dependency patch branch did not resolve every patchable advisory");
+      }
+
+      return patchable;
     },
   );
 
@@ -240,7 +273,7 @@ export async function handlePush(context: WorkflowContext): Promise<void> {
     return;
   }
 
-  await openPatchPR(context.octokit.rest.pulls, repository, patchableFindings);
+  await openPatchPR(context.octokit.rest.pulls, repository, patchableFindings, context.octokit.rest.issues);
 }
 
 export async function handlePullRequest(context: WorkflowContext): Promise<void> {

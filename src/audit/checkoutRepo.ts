@@ -66,6 +66,8 @@ export async function withRepoCheckout<T>(
           GIT_CONFIG_GLOBAL: "",
         })
         .clone(authenticatedUrl, tempDir, [
+          "-c",
+          "credential.helper=",
           "--depth",
           "1",
           "--branch",

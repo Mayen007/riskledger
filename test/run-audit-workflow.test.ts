@@ -6,6 +6,10 @@ import { runAuditNpm } from "../src/audit/runAuditNpm";
 import { runAuditPip } from "../src/audit/runAuditPip";
 import { readFile, writeFile } from "node:fs/promises";
 
+jest.mock("../src/actions/createPatchBranch", () => ({
+  createPatchBranch: jest.fn().mockResolvedValue(true),
+}));
+
 jest.mock("../src/audit/runAuditNpm", () => ({
   runAuditNpm: jest.fn(),
 }));
@@ -101,6 +105,9 @@ const mockedPostRiskComment = jest.mocked(postRiskComment);
 const mockedClassify = jest.mocked(classify);
 const mockedReadFile = jest.mocked(readFile);
 const mockedWriteFile = jest.mocked(writeFile);
+const { createPatchBranch } = jest.requireMock("../src/actions/createPatchBranch") as {
+  createPatchBranch: jest.Mock;
+};
 
 function createContext(overrides: Partial<Parameters<typeof handlePush>[0]> = {}) {
   return {
@@ -148,6 +155,7 @@ describe("runAuditWorkflow", () => {
     mockedClassify.mockReset();
     mockedReadFile.mockReset();
     mockedWriteFile.mockReset();
+    createPatchBranch.mockReset().mockResolvedValue(true);
   });
 
   it("opens a patch PR for patchable findings on push", async () => {
@@ -164,7 +172,8 @@ describe("runAuditWorkflow", () => {
         fixAvailable: true,
       },
     ]);
-    mockedClassify.mockReturnValue([
+    mockedClassify
+      .mockReturnValueOnce([
       {
         finding: {
           ecosystem: "npm",
@@ -178,14 +187,15 @@ describe("runAuditWorkflow", () => {
         decision: "patchable",
         reason: "A fix is available and the severity falls within the auto-patch window.",
       },
-    ]);
+      ])
+      .mockReturnValueOnce([]);
 
     await handlePush(context);
 
     expect(mockedOpenPatchPR).toHaveBeenCalledWith(context.octokit.rest.pulls, {
       owner: "owner",
       repo: "repo",
-    }, expect.any(Array));
+    }, expect.any(Array), context.octokit.rest.issues);
     expect(mockedPostRiskComment).not.toHaveBeenCalled();
   });
 
@@ -203,7 +213,8 @@ describe("runAuditWorkflow", () => {
         fixAvailable: true,
       },
     ]);
-    mockedClassify.mockReturnValue([
+    mockedClassify
+      .mockReturnValueOnce([
       {
         finding: {
           ecosystem: "npm",
@@ -217,9 +228,7 @@ describe("runAuditWorkflow", () => {
         decision: "needs-review",
         reason: "A fix exists, but the severity is outside the auto-patch window.",
       },
-    ]);
-    mockedReadFile.mockResolvedValue("# Accepted risks\n");
-
+      ])
     await handlePullRequest(context);
 
     expect(mockedPostRiskComment).toHaveBeenCalledWith(
@@ -228,11 +237,7 @@ describe("runAuditWorkflow", () => {
       42,
       expect.objectContaining({ decision: "needs-review" }),
     );
-    expect(mockedWriteFile).toHaveBeenCalledWith(
-      expect.stringContaining("accepted-risks.md"),
-      expect.stringContaining("brace-expansion"),
-      "utf8",
-    );
+    expect(mockedWriteFile).not.toHaveBeenCalled();
     expect(mockedOpenPatchPR).not.toHaveBeenCalled();
   });
 
@@ -268,8 +273,9 @@ describe("runAuditWorkflow", () => {
           fixAvailable: true,
         },
       ]);
+    mockedRunAuditNpm.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
-    mockedClassify.mockReturnValue([
+    mockedClassify.mockReturnValueOnce([
       {
         finding: {
           ecosystem: "npm",
@@ -296,7 +302,7 @@ describe("runAuditWorkflow", () => {
         decision: "patchable",
         reason: "Auto patchable",
       },
-    ]);
+    ]).mockReturnValueOnce([]);
 
     await handlePush(context);
 

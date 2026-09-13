@@ -8,6 +8,10 @@ import { openPatchPR } from "../src/actions/openPatchPR";
 import { runAuditNpm } from "../src/audit/runAuditNpm";
 import { readFile, writeFile } from "node:fs/promises";
 
+jest.mock("../src/actions/createPatchBranch", () => ({
+  createPatchBranch: jest.fn(),
+}));
+
 jest.mock("../src/audit/runAuditNpm", () => ({
   runAuditNpm: jest.fn(),
 }));
@@ -159,7 +163,7 @@ describe("pull_request.opened handler", () => {
     mockedWriteFile.mockReset();
   });
 
-  it("posts a risk comment and writes the risk log when a needs-review finding is present", async () => {
+  it("posts a risk comment without writing it as an accepted-risk entry", async () => {
     const payload = loadFixture("pull-request.opened.json");
     const context = createContext(payload);
 
@@ -189,8 +193,6 @@ describe("pull_request.opened handler", () => {
         reason: "A fix exists, but the severity is outside the auto-patch window.",
       },
     ]);
-    mockedReadFile.mockResolvedValue("# Accepted risks\n");
-
     await handlePullRequest(context);
 
     expect(mockedPostRiskComment).toHaveBeenCalledWith(
@@ -199,11 +201,7 @@ describe("pull_request.opened handler", () => {
       7,
       expect.objectContaining({ decision: "needs-review" }),
     );
-    expect(mockedWriteFile).toHaveBeenCalledWith(
-      expect.stringContaining("accepted-risks.md"),
-      expect.stringContaining("brace-expansion"),
-      "utf8",
-    );
+    expect(mockedWriteFile).not.toHaveBeenCalled();
     expect(mockedOpenPatchPR).not.toHaveBeenCalled();
   });
 
